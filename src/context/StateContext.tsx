@@ -35,6 +35,7 @@ interface StateContextType {
   resetData: () => void;
   syncEmail: string;
   connectSyncEmail: (email: string) => Promise<void>;
+  reloadFromCloud: () => Promise<void>;
 }
 
 const StateContext = createContext<StateContextType | undefined>(undefined);
@@ -930,6 +931,27 @@ Você pode sugerir uma portabilidade de crédito para outros bancos (ex: Banco I
     addNotification('Dados Reiniciados', 'A aplicação foi restaurada para o estado de simulação inicial.', 'info');
   };
 
+  const reloadFromCloud = async () => {
+    if (!userId) return;
+    try {
+      console.log('[MongoDB Sync] Recarregando dados da nuvem...');
+      const res = await fetch(`/api/db/sync?userId=${userId}`);
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData.success && resData.data) {
+          const d = resData.data;
+          setDebts(d.debts || []);
+          setPayments(d.payments || []);
+          setReserve(d.reserve || { goalValue: 0, currentBalance: 0, history: [] });
+          setGoals(d.goals || []);
+          setNotifications(d.notifications || []);
+        }
+      }
+    } catch (err: any) {
+      console.error('[MongoDB Reload Error]:', err);
+    }
+  };
+
   return (
     <StateContext.Provider
       value={{
@@ -962,7 +984,8 @@ Você pode sugerir uma portabilidade de crédito para outros bancos (ex: Banco I
         clearNotification,
         resetData,
         syncEmail,
-        connectSyncEmail
+        connectSyncEmail,
+        reloadFromCloud
       }}
     >
       {children}

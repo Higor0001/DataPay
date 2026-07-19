@@ -18,11 +18,12 @@ import {
   Layers,
   ArrowDownToLine,
   X,
-  Trash2
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 
 export const PaymentsView: React.FC = () => {
-  const { payments, debts, payInstallment, payMultipleDebts, addReserveDeposit, deletePayment, addNotification } = useAppState();
+  const { payments, debts, payInstallment, payMultipleDebts, addReserveDeposit, deletePayment, addNotification, reloadFromCloud } = useAppState();
   const [search, setSearch] = useState('');
   const [ocrScanning, setOcrScanning] = useState(false);
   const [ocrResult, setOcrResult] = useState<{
@@ -179,7 +180,7 @@ export const PaymentsView: React.FC = () => {
       } catch (err) {
         console.error('[Polling Error] Falha ao verificar status do Pix:', err);
       }
-    }, 3000);
+    }, 1500);
 
     return () => {
       clearInterval(timer);
@@ -211,6 +212,35 @@ export const PaymentsView: React.FC = () => {
     } catch (err: any) {
       console.error('[Cancel Payment Error]:', err.message);
       addNotification('Erro ao Cancelar', 'Erro de conexão com o servidor.', 'alert');
+    }
+  };
+
+  const handleRefund = async (paymentId: string) => {
+    if (!confirm('Deseja realmente solicitar o reembolso/estorno deste pagamento? O valor correspondente será devolvido à dívida e o saldo atualizado no banco.')) {
+      return;
+    }
+
+    try {
+      addNotification('Processando Estorno', 'Solicitando estorno/reembolso ao servidor...', 'info');
+      const res = await fetch('/api/payments/mercado-pago/refund', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ paymentId })
+      });
+
+      const result = await res.json();
+      if (res.ok && result.success) {
+        addNotification('Estorno Realizado', 'O pagamento foi reembolsado com sucesso e os saldos foram reajustados.', 'success');
+        // Recarrega os dados atualizados da nuvem no estado do app
+        await reloadFromCloud();
+      } else {
+        addNotification('Falha no Estorno', result.error || 'Erro ao processar estorno.', 'alert');
+      }
+    } catch (err: any) {
+      console.error('[Refund Request Error]:', err.message);
+      addNotification('Erro de Conexão', 'Não foi possível se conectar ao servidor.', 'alert');
     }
   };
 
@@ -723,6 +753,8 @@ export const PaymentsView: React.FC = () => {
                           <span className={`px-2 py-0.5 rounded-full border text-[9.5px] font-bold ${
                             isPaid 
                               ? 'bg-emerald-950/40 border-emerald-900/40 text-emerald-400' 
+                              : p.status === 'Reembolsado'
+                              ? 'bg-purple-950/40 border-purple-900/40 text-purple-400'
                               : isOverdue
                               ? 'bg-red-950/40 border-red-900/40 text-red-400 animate-pulse'
                               : 'bg-slate-800 border-slate-700 text-slate-300'
@@ -732,7 +764,16 @@ export const PaymentsView: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3.5 px-6">
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {isPaid && (
+                            <button
+                              onClick={() => handleRefund(p.id)}
+                              className="bg-slate-950 border border-slate-850 hover:border-indigo-900/40 hover:bg-indigo-950/10 text-indigo-400 p-2 rounded-xl transition-all cursor-pointer"
+                              title="Solicitar Reembolso / Estorno"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               if (confirm('Deseja realmente excluir este lançamento do histórico de pagamentos?')) {

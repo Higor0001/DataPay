@@ -45,7 +45,7 @@ export interface Payment {
   amount: number;
   dueDate: string;
   paidDate?: string;
-  status: 'Pago' | 'Pendente' | 'Atrasado' | 'Agendado';
+  status: 'Pago' | 'Pendente' | 'Atrasado' | 'Agendado' | 'Reembolsado';
   method: 'Pix' | 'Boleto' | 'Reserva Inteligente' | 'Automático';
   type: 'Parcela' | 'Amortização' | 'Quitação';
   receipt?: string;
