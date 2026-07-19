@@ -80,7 +80,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [supabaseConfig, setSupabaseConfig] = useState<{ url: string; anonKey: string } | null>(null);
   const [userId, setUserId] = useState<string>('');
 
-  // Load from localStorage and fetch from MongoDB
+  // Load session userId and fetch current data from MongoDB on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       let storedUserId = localStorage.getItem('datapay_user_id');
@@ -90,62 +90,51 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       setUserId(storedUserId);
 
-      const storedDebts = localStorage.getItem('agy_debts');
-      const storedPayments = localStorage.getItem('agy_payments');
-      const storedReserve = localStorage.getItem('agy_reserve');
-      const storedGoals = localStorage.getItem('agy_goals');
-      const storedIntegrations = localStorage.getItem('agy_integrations');
-      const storedNotifications = localStorage.getItem('agy_notifications');
-      const storedMessages = localStorage.getItem('agy_messages');
-      const storedSupabase = localStorage.getItem('agy_supabase_config');
-
-      if (storedDebts) setDebts(JSON.parse(storedDebts));
-      if (storedPayments) setPayments(JSON.parse(storedPayments));
-      if (storedReserve) setReserve(JSON.parse(storedReserve));
-      if (storedGoals) setGoals(JSON.parse(storedGoals));
-      if (storedIntegrations) setIntegrations(JSON.parse(storedIntegrations));
-      if (storedNotifications) setNotifications(JSON.parse(storedNotifications));
-      if (storedMessages) setMessages(JSON.parse(storedMessages));
-      if (storedSupabase) setSupabaseConfig(JSON.parse(storedSupabase));
-
       // Busca dados sincronizados na nuvem via MongoDB
       fetch(`/api/db/sync?userId=${storedUserId}`)
         .then(res => res.json())
         .then(resData => {
           if (resData.success && resData.data) {
             const d = resData.data;
-            if (d.debts && d.debts.length > 0) {
-              setDebts(d.debts);
-              localStorage.setItem('agy_debts', JSON.stringify(d.debts));
-            }
-            if (d.payments && d.payments.length > 0) {
-              setPayments(d.payments);
-              localStorage.setItem('agy_payments', JSON.stringify(d.payments));
-            }
-            if (d.reserve && (d.reserve.goalValue > 0 || d.reserve.currentBalance > 0 || d.reserve.history.length > 0)) {
-              setReserve(d.reserve);
-              localStorage.setItem('agy_reserve', JSON.stringify(d.reserve));
-            }
-            if (d.goals && d.goals.length > 0) {
-              setGoals(d.goals);
-              localStorage.setItem('agy_goals', JSON.stringify(d.goals));
-            }
-            if (d.notifications && d.notifications.length > 0) {
-              setNotifications(d.notifications);
-              localStorage.setItem('agy_notifications', JSON.stringify(d.notifications));
-            }
-            console.log('[MongoDB Sync] Loaded data from cloud successfully.');
+            if (d.debts) setDebts(d.debts);
+            if (d.payments) setPayments(d.payments);
+            if (d.reserve) setReserve(d.reserve);
+            if (d.goals) setGoals(d.goals);
+            if (d.notifications) setNotifications(d.notifications);
+            console.log('[MongoDB Sync] Loaded data from cloud database successfully.');
           }
         })
         .catch(err => console.error('[MongoDB Init Load Error]:', err));
     }
   }, []);
 
-  // Save to localStorage helper
-  const saveToLocal = (key: string, data: any) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(key, JSON.stringify(data));
+  // Sincronização automática em lote em background ao detectar modificações no estado local
+  useEffect(() => {
+    if (userId) {
+      const timer = setTimeout(() => {
+        console.log('[MongoDB Auto Sync] Salvando alterações no banco de dados...');
+        fetch('/api/db/sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            userId,
+            debts,
+            payments,
+            reserve,
+            goals,
+            notifications
+          })
+        }).catch(err => console.error('[MongoDB Auto Sync Error]:', err));
+      }, 800); // 800ms debounce para evitar excesso de requisições
+      return () => clearTimeout(timer);
     }
+  }, [userId, debts, payments, reserve, goals, notifications]);
+
+  // Save to localStorage helper (No-op: desativado salvamento local para manter dados apenas no banco MongoDB)
+  const saveToLocal = (key: string, data: any) => {
+    // No-op: Dados financeiros não são gravados localmente
   };
 
   const addDebt = (newDebt: Omit<Debt, 'id' | 'status' | 'nextDueDate'>) => {
