@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PaymentProviderFactory } from '../../../../../utils/paymentProviders';
+import { connectToDatabase } from '@/utils/mongodb';
 
 // Armazenamento em memória síncrono para desenvolvimento/simulação
 const globalTransactions = (global as any).paymentTransactions || new Map();
@@ -43,6 +44,15 @@ export async function POST(req: NextRequest) {
     };
 
     globalTransactions.set(pix.id, transaction);
+
+    // Persiste a transação no MongoDB para durabilidade (serverless/Vercel)
+    try {
+      const { db } = await connectToDatabase();
+      await db.collection('Transactions').insertOne({ ...transaction });
+      console.log(`[DataPay API] Transação ${pix.id} persistida no MongoDB.`);
+    } catch (dbErr: any) {
+      console.error('[DataPay API DB Error] Falha ao persistir transação no MongoDB:', dbErr.message);
+    }
 
     return NextResponse.json({
       success: true,

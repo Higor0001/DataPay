@@ -80,7 +80,16 @@ export async function POST(req: NextRequest) {
     if (transactionId.startsWith('sandbox_mp_') || payload.simulated) {
       console.log(`[DataPay Webhook] Processando simulação local para ID: ${transactionId}...`);
       
-      const transaction = globalTransactions.get(transactionId);
+      let transaction = globalTransactions.get(transactionId);
+      if (!transaction) {
+        try {
+          const { db } = await connectToDatabase();
+          transaction = await db.collection('Transactions').findOne({ id: transactionId });
+        } catch (dbErr: any) {
+          console.error('[Sandbox Webhook DB Error]:', dbErr.message);
+        }
+      }
+
       if (transaction) {
         transaction.status = 'Pago';
         transaction.updatedAt = new Date().toISOString();
@@ -88,12 +97,21 @@ export async function POST(req: NextRequest) {
         
         console.log(`[DataPay Webhook] Transação Sandbox ${transactionId} confirmada como PAGO.`);
         
-        // Atualiza banco de dados do MongoDB
+        // Atualiza banco de dados do MongoDB (coleção Finanças)
         updateMongoDBTransaction(transactionId, transaction);
+
+        // Atualiza status da transação na coleção geral Transactions
+        try {
+          const { db } = await connectToDatabase();
+          await db.collection('Transactions').updateOne(
+            { id: transactionId },
+            { $set: { status: 'Pago', updatedAt: transaction.updatedAt } }
+          );
+        } catch (err) {}
 
         return NextResponse.json({ success: true, message: 'Simulação de pagamento confirmada.' });
       }
-      return NextResponse.json({ error: 'Simulação: Transação Sandbox não encontrada na memória.' }, { status: 404 });
+      return NextResponse.json({ error: 'Simulação: Transação Sandbox não encontrada na memória ou banco.' }, { status: 404 });
     }
 
     // 2. INTEGRAÇÃO COM PRODUÇÃO REAL (MERCADO PAGO API via SDK Oficial)
@@ -133,20 +151,48 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const transaction = globalTransactions.get(transactionId);
+    let transaction = globalTransactions.get(transactionId);
+    if (!transaction) {
+      console.log(`[DataPay Webhook] Transação ${transactionId} não encontrada em memória. Buscando no MongoDB...`);
+      try {
+        const { db } = await connectToDatabase();
+        transaction = await db.collection('Transactions').findOne({ id: transactionId });
+      } catch (dbErr: any) {
+        console.error('[DataPay Webhook DB Fetch Error]:', dbErr.message);
+      }
+    }
+
     if (transaction) {
       if (mpStatus === 'approved') {
         transaction.status = 'Pago';
-        // Atualiza banco de dados do MongoDB
+        // Atualiza as tabelas financeiras do usuário (debts, payments, notifications) na coleção 'Finanças'
         updateMongoDBTransaction(transactionId, transaction);
       } else if (mpStatus === 'cancelled' || mpStatus === 'rejected') {
         transaction.status = 'Cancelado';
       }
       transaction.updatedAt = new Date().toISOString();
       globalTransactions.set(transactionId, transaction);
+
+      // Atualiza o status do registro de transação geral na coleção 'Transactions'
+      try {
+        const { db } = await connectToDatabase();
+        await db.collection('Transactions').updateOne(
+          { id: transactionId },
+          { 
+            $set: { 
+              status: transaction.status, 
+              updatedAt: transaction.updatedAt 
+            } 
+          }
+        );
+        console.log(`[DataPay Webhook] Status da transação ${transactionId} atualizado para '${transaction.status}' no MongoDB.`);
+      } catch (dbErr: any) {
+        console.error('[DataPay Webhook DB Update Error]:', dbErr.message);
+      }
+
       console.log(`[DataPay Webhook] Transação real ${transactionId} atualizada para: ${transaction.status}`);
     } else {
-      console.warn(`[DataPay Webhook] ID de transação ${transactionId} não encontrado no mapa local.`);
+      console.warn(`[DataPay Webhook] ID de transação ${transactionId} não encontrado no mapa local ou banco.`);
     }
 
     return NextResponse.json({

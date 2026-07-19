@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { connectToDatabase } from '@/utils/mongodb';
 
 // Busca a mesma referência de memória global para obter as transações ativas
 const globalTransactions = (global as any).paymentTransactions || new Map();
@@ -16,7 +17,17 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const transaction = globalTransactions.get(id);
+    let transaction = globalTransactions.get(id);
+
+    if (!transaction) {
+      console.log(`[DataPay Status API] Transação ${id} não encontrada em memória. Buscando no MongoDB...`);
+      try {
+        const { db } = await connectToDatabase();
+        transaction = await db.collection('Transactions').findOne({ id });
+      } catch (dbErr: any) {
+        console.error('[DataPay Status API DB Error] Falha ao consultar transação no MongoDB:', dbErr.message);
+      }
+    }
 
     if (!transaction) {
       return NextResponse.json(
