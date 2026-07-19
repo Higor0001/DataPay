@@ -45,21 +45,21 @@ export const SettingsView: React.FC = () => {
   // Pix direct config states
   const [pixKey, setPixKey] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('datapay_pix_key') || '5f46b3a3-3980-4c91-a7b5-02b44b2b447c';
+      return localStorage.getItem('datapay_pix_key') || '';
     }
-    return '5f46b3a3-3980-4c91-a7b5-02b44b2b447c';
+    return '';
   });
   const [pixName, setPixName] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('datapay_pix_name') || 'Alexandre Higor Costa Queiroz';
+      return localStorage.getItem('datapay_pix_name') || '';
     }
-    return 'Alexandre Higor Costa Queiroz';
+    return '';
   });
   const [pixCity, setPixCity] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('datapay_pix_city') || 'Cachoeiro de Itapemirim';
+      return localStorage.getItem('datapay_pix_city') || '';
     }
-    return 'Cachoeiro de Itapemirim';
+    return '';
   });
 
   const handleSavePixConfig = (e: React.FormEvent) => {

@@ -30,29 +30,33 @@ export const ReserveView: React.FC = () => {
 
   const [pixKey] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('datapay_pix_key') || '5f46b3a3-3980-4c91-a7b5-02b44b2b447c';
+      return localStorage.getItem('datapay_pix_key') || '';
     }
-    return '5f46b3a3-3980-4c91-a7b5-02b44b2b447c';
+    return '';
   });
   const [pixName] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('datapay_pix_name') || 'Alexandre Higor Costa Queiroz';
+      return localStorage.getItem('datapay_pix_name') || '';
     }
-    return 'Alexandre Higor Costa Queiroz';
+    return '';
   });
   const [pixCity] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('datapay_pix_city') || 'Cachoeiro de Itapemirim';
+      return localStorage.getItem('datapay_pix_city') || '';
     }
-    return 'Cachoeiro de Itapemirim';
+    return '';
   });
 
-  const currentPixPayload = getStaticPixPayload(
-    Number(depositAmount) || reserve.goalValue,
-    pixKey,
-    pixName,
-    pixCity
-  );
+  const isPixConfigured = pixKey.trim() !== '';
+
+  const currentPixPayload = isPixConfigured
+    ? getStaticPixPayload(
+        Number(depositAmount) || reserve.goalValue,
+        pixKey,
+        pixName || 'DATAPAY',
+        pixCity || 'SAO PAULO'
+      )
+    : getPixCopyPasteCode(Number(depositAmount) || reserve.goalValue, 'ReservaFinanceira');
 
   const copyPixCode = () => {
     navigator.clipboard.writeText(currentPixPayload);
@@ -295,7 +299,7 @@ export const ReserveView: React.FC = () => {
             <div className="flex flex-col items-center text-center space-y-4">
               
               <div className="bg-indigo-950/40 border border-indigo-900/30 p-3 rounded-2xl text-[11px] text-indigo-300 font-semibold w-full">
-                Destino: Pix Direto (Sua chave configurada)
+                Destino: {isPixConfigured ? 'Pix Direto (Sua chave)' : 'Simulador Mercado Pago (Sandbox)'}
               </div>
 
               {/* Real QR Code Image Rendering */}
