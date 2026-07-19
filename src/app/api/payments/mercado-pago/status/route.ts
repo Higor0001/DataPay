@@ -51,3 +51,38 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    const { id, status } = await req.json();
+    if (!id || !status) {
+      return NextResponse.json({ error: 'ID e status são obrigatórios.' }, { status: 400 });
+    }
+
+    console.log(`[DataPay Status API] Solicitado cancelamento / alteração da transação ${id} para: ${status}`);
+
+    // 1. Atualiza no mapa de memória local
+    const transaction = globalTransactions.get(id);
+    if (transaction) {
+      transaction.status = status;
+      transaction.updatedAt = new Date().toISOString();
+      globalTransactions.set(id, transaction);
+    }
+
+    // 2. Atualiza no MongoDB
+    try {
+      const { db } = await connectToDatabase();
+      await db.collection('Transactions').updateOne(
+        { id },
+        { $set: { status, updatedAt: new Date().toISOString() } }
+      );
+      console.log(`[DataPay Status API] Transação ${id} atualizada no MongoDB para: ${status}`);
+    } catch (dbErr: any) {
+      console.error('[DataPay Status API DB Error] Falha ao atualizar transação no MongoDB:', dbErr.message);
+    }
+
+    return NextResponse.json({ success: true, status });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

@@ -187,6 +187,33 @@ export const PaymentsView: React.FC = () => {
     };
   }, [pixModalData]);
 
+  const handleCancelPayment = async () => {
+    if (!pixModalData) return;
+    
+    try {
+      const res = await fetch('/api/payments/mercado-pago/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: pixModalData.id,
+          status: 'Cancelado'
+        })
+      });
+      
+      if (res.ok) {
+        setPixModalData((prev) => prev ? { ...prev, status: 'Cancelado' } : null);
+        addNotification('Cobrança Cancelada', 'A cobrança Pix foi cancelada com sucesso.', 'info');
+      } else {
+        addNotification('Erro ao Cancelar', 'Não foi possível cancelar a cobrança no servidor.', 'alert');
+      }
+    } catch (err: any) {
+      console.error('[Cancel Payment Error]:', err.message);
+      addNotification('Erro ao Cancelar', 'Erro de conexão com o servidor.', 'alert');
+    }
+  };
+
   const handleBatchPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedDebtIds.length === 0) {
@@ -736,12 +763,14 @@ export const PaymentsView: React.FC = () => {
             {/* Header / Close */}
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white text-sm">Reserva de Dívidas via Pix</h3>
-              <button
-                onClick={() => setPixModalData(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 transition-colors"
-              >
-                <X className="h-4.5 w-4.5" />
-              </button>
+              {pixModalData.status !== 'Pendente' && (
+                <button
+                  onClick={() => setPixModalData(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 transition-colors"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              )}
             </div>
 
             {/* Status Indicator */}
@@ -796,6 +825,14 @@ export const PaymentsView: React.FC = () => {
                     </span>
                   </div>
                 </>
+              ) : pixModalData.status === 'Cancelado' ? (
+                <div className="h-44 w-44 rounded-2xl bg-slate-900/45 border border-slate-800/80 flex flex-col items-center justify-center space-y-2">
+                  <div className="bg-slate-800/40 text-slate-400 p-3 rounded-full border border-slate-700/20">
+                    <X className="h-8 w-8 text-slate-400" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-400">Cancelado</span>
+                  <span className="text-[9.5px] text-slate-500">A cobrança foi cancelada</span>
+                </div>
               ) : (
                 <div className="h-44 w-44 rounded-2xl bg-red-950/20 border border-red-900/30 flex flex-col items-center justify-center space-y-2">
                   <span className="text-xs font-bold text-red-450">Tempo Esgotado</span>
@@ -833,6 +870,12 @@ export const PaymentsView: React.FC = () => {
                     className="flex-1 bg-slate-950 border border-slate-850 hover:bg-slate-800 text-slate-300 text-[10.5px] font-bold py-2.5 rounded-xl cursor-pointer"
                   >
                     Compartilhar QR Code
+                  </button>
+                  <button
+                    onClick={handleCancelPayment}
+                    className="flex-1 bg-red-950/25 border border-red-900/40 hover:bg-red-900/35 text-red-400 text-[10.5px] font-bold py-2.5 rounded-xl cursor-pointer transition-all"
+                  >
+                    Cancelar Cobrança
                   </button>
                 </div>
 
@@ -875,6 +918,16 @@ export const PaymentsView: React.FC = () => {
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3.5 rounded-xl cursor-pointer transition-all"
               >
                 Concluir Checkout
+              </button>
+            )}
+
+            {/* Cancelled / Expired footer */}
+            {(pixModalData.status === 'Cancelado' || pixModalData.status === 'Expirado') && (
+              <button
+                onClick={() => setPixModalData(null)}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-3.5 rounded-xl cursor-pointer transition-all"
+              >
+                Fechar Checkout
               </button>
             )}
 

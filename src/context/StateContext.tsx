@@ -82,6 +82,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [supabaseConfig, setSupabaseConfig] = useState<{ url: string; anonKey: string } | null>(null);
   const [userId, setUserId] = useState<string>('');
   const [syncEmail, setSyncEmail] = useState<string>('');
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
   // Load session userId and fetch current data from MongoDB on mount
   useEffect(() => {
@@ -113,8 +114,12 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             if (d.notifications) setNotifications(d.notifications);
             console.log('[MongoDB Sync] Loaded data from cloud database successfully.');
           }
+          setIsLoaded(true); // Concluiu carregamento inicial
         })
-        .catch(err => console.error('[MongoDB Init Load Error]:', err));
+        .catch(err => {
+          console.error('[MongoDB Init Load Error]:', err);
+          setIsLoaded(true); // Permite salvar se banco falhar temporariamente
+        });
     }
   }, []);
 
@@ -123,6 +128,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const cleanEmail = email.trim();
     if (!cleanEmail) return;
 
+    setIsLoaded(false); // Bloqueia sincronização automática durante transição
     // Gera um ID determinístico baseado no e-mail
     const newUserId = 'email_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
     
@@ -161,15 +167,17 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           );
         }
       }
+      setIsLoaded(true); // Desbloqueia sincronização automática com dados carregados
     } catch (err: any) {
       console.error('[MongoDB Sync Connection Error]:', err);
       addNotification('Erro de Conexão', 'Não foi possível baixar os dados da nuvem.', 'alert');
+      setIsLoaded(true);
     }
   };
 
   // Sincronização automática em lote em background ao detectar modificações no estado local
   useEffect(() => {
-    if (userId) {
+    if (userId && isLoaded) {
       const timer = setTimeout(() => {
         console.log('[MongoDB Auto Sync] Salvando alterações no banco de dados...');
         fetch('/api/db/sync', {
@@ -189,7 +197,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }, 800); // 800ms debounce para evitar excesso de requisições
       return () => clearTimeout(timer);
     }
-  }, [userId, debts, payments, reserve, goals, notifications]);
+  }, [userId, isLoaded, debts, payments, reserve, goals, notifications]);
 
   // Save to localStorage helper (No-op: desativado salvamento local para manter dados apenas no banco MongoDB)
   const saveToLocal = (key: string, data: any) => {
