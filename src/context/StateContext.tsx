@@ -37,195 +37,17 @@ interface StateContextType {
 
 const StateContext = createContext<StateContextType | undefined>(undefined);
 
-const initialDebts: Debt[] = [
-  {
-    id: '1',
-    name: 'Fatura Cartão Black',
-    bank: 'Nubank',
-    type: 'Cartão',
-    originalValue: 5000,
-    currentBalance: 4200,
-    interestRate: 14.5,
-    cet: 395.4,
-    iof: 28.5,
-    fine: 2,
-    delayFee: 1,
-    contractDate: '2026-06-10',
-    dueDate: 10,
-    nextDueDate: '2026-07-10', // Overdue since current date is 2026-07-19
-    totalInstallments: 1,
-    remainingInstallments: 1,
-    installmentValue: 4200,
-    indexUsed: 'Taxa Fixa',
-    notes: 'Fatura vencida. Necessário amortizar ou pagar o quanto antes para evitar bola de neve de juros.',
-    status: 'overdue'
-  },
-  {
-    id: '2',
-    name: 'Empréstimo Pessoal',
-    bank: 'Itaú',
-    type: 'Empréstimo',
-    originalValue: 25000,
-    currentBalance: 18500,
-    interestRate: 4.8,
-    cet: 76.2,
-    iof: 120.0,
-    fine: 2,
-    delayFee: 1.5,
-    contractDate: '2025-10-15',
-    dueDate: 15,
-    nextDueDate: '2026-08-15', // Paid July 15, next is August
-    totalInstallments: 24,
-    remainingInstallments: 14,
-    installmentValue: 1650,
-    indexUsed: 'Taxa Fixa',
-    notes: 'Débito em conta corrente Itaú.',
-    status: 'active'
-  },
-  {
-    id: '3',
-    name: 'Financiamento Minha Casa',
-    bank: 'Caixa',
-    type: 'Financiamento',
-    originalValue: 350000,
-    currentBalance: 310000,
-    interestRate: 0.8,
-    cet: 10.5,
-    iof: 0,
-    fine: 2,
-    delayFee: 0.5,
-    contractDate: '2024-01-20',
-    dueDate: 20,
-    nextDueDate: '2026-07-20', // Due tomorrow! (relative to 2026-07-19)
-    totalInstallments: 360,
-    remainingInstallments: 312,
-    installmentValue: 2450,
-    indexUsed: 'TR + IPCA',
-    notes: 'Financiamento imobiliário indexado pela Taxa Referencial.',
-    status: 'active'
-  },
-  {
-    id: '4',
-    name: 'Crédito Consignado Folha',
-    bank: 'Banco do Brasil',
-    type: 'Consignado',
-    originalValue: 15000,
-    currentBalance: 8200,
-    interestRate: 1.9,
-    cet: 25.4,
-    iof: 35.0,
-    fine: 1,
-    delayFee: 0.5,
-    contractDate: '2025-02-28',
-    dueDate: 28,
-    nextDueDate: '2026-07-28', // Active, due in 9 days
-    totalInstallments: 48,
-    remainingInstallments: 22,
-    installmentValue: 420,
-    indexUsed: 'Prefixado',
-    notes: 'Descontado direto em folha de pagamento.',
-    status: 'active'
-  },
-  {
-    id: '5',
-    name: 'Renegociação Auto',
-    bank: 'Santander',
-    type: 'Negociação',
-    originalValue: 45000,
-    currentBalance: 12000,
-    interestRate: 2.1,
-    cet: 28.2,
-    iof: 85.0,
-    fine: 2,
-    delayFee: 1,
-    contractDate: '2024-05-05',
-    dueDate: 5,
-    nextDueDate: '2026-08-05', // Paid for July
-    totalInstallments: 36,
-    remainingInstallments: 10,
-    installmentValue: 1450,
-    indexUsed: 'Taxa Fixa',
-    notes: 'Renegociação de financiamento de veículo.',
-    status: 'active'
-  }
-];
+const initialDebts: Debt[] = [];
 
-const initialPayments: Payment[] = [
-  {
-    id: 'p1',
-    debtId: '2',
-    debtName: 'Empréstimo Pessoal',
-    bankName: 'Itaú',
-    amount: 1650,
-    dueDate: '2026-07-15',
-    paidDate: '2026-07-15',
-    status: 'Pago',
-    method: 'Automático',
-    type: 'Parcela'
-  },
-  {
-    id: 'p2',
-    debtId: '5',
-    debtName: 'Renegociação Auto',
-    bankName: 'Santander',
-    amount: 1450,
-    dueDate: '2026-07-05',
-    paidDate: '2026-07-04',
-    status: 'Pago',
-    method: 'Pix',
-    type: 'Parcela'
-  },
-  {
-    id: 'p3',
-    debtId: '1',
-    debtName: 'Fatura Cartão Black',
-    bankName: 'Nubank',
-    amount: 4200,
-    dueDate: '2026-07-10',
-    status: 'Atrasado',
-    method: 'Pix',
-    type: 'Parcela'
-  },
-  {
-    id: 'p4',
-    debtId: '3',
-    debtName: 'Financiamento Minha Casa',
-    bankName: 'Caixa',
-    amount: 2450,
-    dueDate: '2026-07-20',
-    status: 'Pendente',
-    method: 'Reserva Inteligente',
-    type: 'Parcela'
-  },
-  {
-    id: 'p5',
-    debtId: '4',
-    debtName: 'Crédito Consignado Folha',
-    bankName: 'Banco do Brasil',
-    amount: 420,
-    dueDate: '2026-07-28',
-    status: 'Pendente',
-    method: 'Automático',
-    type: 'Parcela'
-  }
-];
+const initialPayments: Payment[] = [];
 
 const initialReserve: SmartReserve = {
-  goalValue: 700,
-  currentBalance: 2800,
-  history: [
-    { id: 'h1', date: '2026-04-10', amount: 700, type: 'deposit', description: 'Depósito mensal programado' },
-    { id: 'h2', date: '2026-05-10', amount: 700, type: 'deposit', description: 'Depósito mensal programado' },
-    { id: 'h3', date: '2026-06-10', amount: 700, type: 'deposit', description: 'Depósito mensal programado' },
-    { id: 'h4', date: '2026-07-10', amount: 700, type: 'deposit', description: 'Depósito mensal programado' }
-  ]
+  goalValue: 0,
+  currentBalance: 0,
+  history: []
 };
 
-const initialGoals: Goal[] = [
-  { id: 'g1', name: 'Quitar Fatura Nubank', targetValue: 4200, currentValue: 2800, type: 'quitar_cartao', deadline: '2026-08-30', accumulatedSavings: 0 },
-  { id: 'g2', name: 'Reserva para Emergências', targetValue: 10000, currentValue: 2800, type: 'fundo_emergencia', deadline: '2026-12-31', accumulatedSavings: 450 },
-  { id: 'g3', name: 'Eliminar Empréstimo Itaú', targetValue: 18500, currentValue: 0, type: 'quitar_emprestimo', deadline: '2027-06-30', accumulatedSavings: 1200 }
-];
+const initialGoals: Goal[] = [];
 
 const initialIntegrations: BankIntegration[] = [
   { id: 'nubank', name: 'Nubank', logo: '🟣', connected: false },
@@ -236,32 +58,7 @@ const initialIntegrations: BankIntegration[] = [
   { id: 'mercadopago', name: 'Mercado Pago', logo: '🟢', connected: false }
 ];
 
-const initialNotifications: AppNotification[] = [
-  {
-    id: 'n1',
-    title: 'Dívida Vencida!',
-    content: 'A sua fatura do Cartão Nubank venceu em 10/07/2026. Evite juros rotativos de 14.5% pagando agora.',
-    date: '2026-07-11',
-    read: false,
-    type: 'alert'
-  },
-  {
-    id: 'n2',
-    title: 'Vencimento Próximo',
-    content: 'O Financiamento Minha Casa (Caixa) de R$ 2.450 vence amanhã (20/07/2026).',
-    date: '2026-07-19',
-    read: false,
-    type: 'warning'
-  },
-  {
-    id: 'n3',
-    title: 'Reserva Gerada com Sucesso',
-    content: 'Sua reserva mensal de R$ 700 está disponível para amortização de dívidas.',
-    date: '2026-07-10',
-    read: true,
-    type: 'success'
-  }
-];
+const initialNotifications: AppNotification[] = [];
 
 const initialMessages: AIMessage[] = [
   {
