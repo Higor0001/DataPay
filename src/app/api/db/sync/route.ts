@@ -6,41 +6,35 @@ export async function GET(req: NextRequest) {
     const userId = req.nextUrl.searchParams.get('userId') || 'default_user';
     const { db } = await connectToDatabase();
 
-    // Busca as coleções associadas ao usuário
-    const debts = await db.collection('debts').find({ userId }).toArray();
-    const payments = await db.collection('payments').find({ userId }).toArray();
-    const reserve = await db.collection('reserves').findOne({ userId });
-    const goals = await db.collection('goals').find({ userId }).toArray();
-    const notifications = await db.collection('notifications').find({ userId }).toArray();
+    // Busca os dados financeiros consolidados do usuário na coleção 'Finanças'
+    const financeData = await db.collection('Finanças').findOne({ userId });
 
+    if (financeData) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          debts: financeData.debts || [],
+          payments: financeData.payments || [],
+          reserve: financeData.reserve || { goalValue: 0, currentBalance: 0, history: [] },
+          goals: financeData.goals || [],
+          notifications: financeData.notifications || []
+        }
+      });
+    }
+
+    // Se o usuário não tiver dados salvos, retorna estrutura limpa padrão
     return NextResponse.json({
       success: true,
       data: {
-        debts: debts.map(d => {
-          const { _id, userId: _, ...rest } = d;
-          return { ...rest };
-        }),
-        payments: payments.map(p => {
-          const { _id, userId: _, ...rest } = p;
-          return { ...rest };
-        }),
-        reserve: reserve ? {
-          goalValue: reserve.goalValue,
-          currentBalance: reserve.currentBalance,
-          history: reserve.history || []
-        } : { goalValue: 0, currentBalance: 0, history: [] },
-        goals: goals.map(g => {
-          const { _id, userId: _, ...rest } = g;
-          return { ...rest };
-        }),
-        notifications: notifications.map(n => {
-          const { _id, userId: _, ...rest } = n;
-          return { ...rest };
-        })
+        debts: [],
+        payments: [],
+        reserve: { goalValue: 0, currentBalance: 0, history: [] },
+        goals: [],
+        notifications: []
       }
     });
   } catch (error: any) {
-    console.error('[MongoDB Load Error]:', error);
+    console.error('[MongoDB Finanças Load Error]:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -55,57 +49,26 @@ export async function POST(req: NextRequest) {
 
     const { db } = await connectToDatabase();
 
-    // 1. Sincroniza Dívidas
-    if (Array.isArray(debts)) {
-      await db.collection('debts').deleteMany({ userId });
-      if (debts.length > 0) {
-        await db.collection('debts').insertMany(debts.map(d => ({ ...d, userId })));
-      }
-    }
+    // Salva ou atualiza a estrutura inteira de Finanças do usuário de forma atômica
+    await db.collection('Finanças').updateOne(
+      { userId },
+      { 
+        $set: { 
+          userId,
+          debts: debts || [],
+          payments: payments || [],
+          reserve: reserve || { goalValue: 0, currentBalance: 0, history: [] },
+          goals: goals || [],
+          notifications: notifications || [],
+          updatedAt: new Date().toISOString()
+        } 
+      },
+      { upsert: true }
+    );
 
-    // 2. Sincroniza Pagamentos
-    if (Array.isArray(payments)) {
-      await db.collection('payments').deleteMany({ userId });
-      if (payments.length > 0) {
-        await db.collection('payments').insertMany(payments.map(p => ({ ...p, userId })));
-      }
-    }
-
-    // 3. Sincroniza Reserva
-    if (reserve) {
-      await db.collection('reserves').updateOne(
-        { userId },
-        { 
-          $set: { 
-            goalValue: reserve.goalValue, 
-            currentBalance: reserve.currentBalance, 
-            history: reserve.history || [], 
-            updatedAt: new Date().toISOString() 
-          } 
-        },
-        { upsert: true }
-      );
-    }
-
-    // 4. Sincroniza Metas (Goals)
-    if (Array.isArray(goals)) {
-      await db.collection('goals').deleteMany({ userId });
-      if (goals.length > 0) {
-        await db.collection('goals').insertMany(goals.map(g => ({ ...g, userId })));
-      }
-    }
-
-    // 5. Sincroniza Notificações
-    if (Array.isArray(notifications)) {
-      await db.collection('notifications').deleteMany({ userId });
-      if (notifications.length > 0) {
-        await db.collection('notifications').insertMany(notifications.map(n => ({ ...n, userId })));
-      }
-    }
-
-    return NextResponse.json({ success: true, message: 'MongoDB Sync Completed' });
+    return NextResponse.json({ success: true, message: 'Dados de Finanças atualizados no MongoDB' });
   } catch (error: any) {
-    console.error('[MongoDB Save Error]:', error);
+    console.error('[MongoDB Finanças Save Error]:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -20,6 +20,6 @@ if (process.env.NODE_ENV === 'development') {
 
 export async function connectToDatabase(): Promise<{ client: MongoClient; db: Db }> {
   const clientResolved = await clientPromise;
-  const db = clientResolved.db();
+  const db = clientResolved.db('DataPay');
   return { client: clientResolved, db };
 }
