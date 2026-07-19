@@ -65,11 +65,14 @@ export const PaymentsView: React.FC = () => {
     return sum + (isNaN(val) ? 0 : val);
   }, 0);
 
-  const filteredPayments = payments.filter((p) => {
-    const matchesSearch = p.debtName.toLowerCase().includes(search.toLowerCase()) || 
-                          p.bankName.toLowerCase().includes(search.toLowerCase()) ||
-                          p.status.toLowerCase().includes(search.toLowerCase());
-    const matchesTab = activeTab === 'history' ? p.status === 'Pago' : p.status !== 'Pago';
+  const filteredPayments = (payments || []).filter((p) => {
+    const debtName = p.debtName || 'Dívida';
+    const bankName = p.bankName || 'Banco';
+    const status = p.status || 'Pendente';
+    const matchesSearch = debtName.toLowerCase().includes(search.toLowerCase()) || 
+                          bankName.toLowerCase().includes(search.toLowerCase()) ||
+                          status.toLowerCase().includes(search.toLowerCase());
+    const matchesTab = activeTab === 'history' ? status === 'Pago' : status !== 'Pago';
     return matchesSearch && matchesTab;
   });
 

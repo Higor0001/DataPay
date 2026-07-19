@@ -240,9 +240,11 @@ async function updateMongoDBTransaction(transactionId: string, transaction: any)
 
       // 1. Atualizar a Dívida no array local
       let debtName = '';
+      let bankName = '';
       debts = debts.map((d: any) => {
         if (d.id === debtId) {
           debtName = d.name;
+          bankName = d.bank;
           const currentBalance = Number(d.currentBalance) || 0;
           const newBalance = Math.max(0, currentBalance - paidAmount);
           const status = newBalance <= 0 ? 'paid' : 'active';
@@ -267,6 +269,8 @@ async function updateMongoDBTransaction(transactionId: string, transaction: any)
         id: paymentId,
         userId,
         debtId,
+        debtName: debtName || 'Dívida',
+        bankName: bankName || 'Banco',
         amount: paidAmount,
         dueDate: new Date().toISOString().split('T')[0],
         paidDate: new Date().toISOString(),
