@@ -774,13 +774,13 @@ export const PaymentsView: React.FC = () => {
                     <img
                       src={`data:image/png;base64,${pixModalData.qrCodeBase64}`}
                       alt="Pix QR Code"
-                      className="h-44 w-44 rounded-xl border border-slate-800 p-2 bg-white"
+                      className="h-44 w-44 rounded-lg border border-slate-800 p-1.5 bg-white"
                     />
                   ) : (
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(pixModalData.qrCodeCopyPaste)}`}
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(pixModalData.qrCodeCopyPaste)}`}
                       alt="Pix QR Code"
-                      className="h-44 w-44 rounded-xl border border-slate-800 p-2 bg-white"
+                      className="h-44 w-44 rounded-lg border border-slate-800 p-1.5 bg-white"
                     />
                   )}
                   

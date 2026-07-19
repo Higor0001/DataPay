@@ -305,9 +305,9 @@ export const ReserveView: React.FC = () => {
               {/* Real QR Code Image Rendering */}
               <div className="bg-white p-4 rounded-3xl shadow-inner border border-slate-200">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(currentPixPayload)}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(currentPixPayload)}`}
                   alt="QR Code Pix"
-                  className="mx-auto w-[180px] h-[180px] rounded-2xl"
+                  className="mx-auto w-[180px] h-[180px] rounded-lg"
                 />
               </div>
 
