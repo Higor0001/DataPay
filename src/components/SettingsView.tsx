@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppState } from '../context/StateContext';
 import { BankIntegration } from '../types';
 import { parseOFX, OfxTransaction } from '../utils/ofxParser';
@@ -33,14 +33,19 @@ export const SettingsView: React.FC = () => {
     payInstallment,
     addReserveDeposit,
     withdrawReserve,
-    supabaseConfig,
-    saveSupabaseConfig,
     syncWithMongoDB,
     resetData,
-    addNotification
+    addNotification,
+    syncEmail,
+    connectSyncEmail
   } = useAppState();
 
   const [activeSettingsTab, setActiveSettingsTab] = useState<'integrations' | 'supabase' | 'security' | 'pix'>('integrations');
+  const [emailInput, setEmailInput] = useState(syncEmail);
+
+  useEffect(() => {
+    setEmailInput(syncEmail);
+  }, [syncEmail]);
 
   // Pix direct config states
   const [pixKey, setPixKey] = useState(() => {
@@ -70,9 +75,6 @@ export const SettingsView: React.FC = () => {
     addNotification('Configuração Pix Salva', 'Sua chave Pix e dados do titular foram salvos com sucesso!', 'success');
   };
 
-  // Supabase input states
-  const [sbUrl, setSbUrl] = useState(supabaseConfig?.url || '');
-  const [sbKey, setSbKey] = useState(supabaseConfig?.anonKey || '');
   const [isSyncing, setIsSyncing] = useState(false);
 
   // OFX Import states
@@ -90,11 +92,6 @@ export const SettingsView: React.FC = () => {
     reserveInsufficient: true,
     goalMet: true
   });
-
-  const handleSaveSb = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveSupabaseConfig(sbUrl, sbKey);
-  };
 
   const handleSyncClick = async () => {
     setIsSyncing(true);
@@ -373,7 +370,6 @@ export const SettingsView: React.FC = () => {
             </div>
           )}
 
-          {/* Tab 2: Supabase connection */}
           {/* Tab 2: MongoDB connection */}
           {activeSettingsTab === 'supabase' && (
             <div className="space-y-6">
@@ -383,7 +379,7 @@ export const SettingsView: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-white text-sm">Sincronização em Nuvem (MongoDB)</h3>
-                  <p className="text-[10px] text-slate-400">Salve seus dados na nuvem com segurança e acesse de qualquer dispositivo.</p>
+                  <p className="text-[10px] text-slate-400">Guarde suas faturas e dívidas na nuvem e acesse de qualquer aparelho.</p>
                 </div>
               </div>
 
@@ -396,23 +392,59 @@ export const SettingsView: React.FC = () => {
                 </div>
                 
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400 font-medium">ID de Usuário Sincronizado:</span>
-                  <span className="font-mono text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
-                    {typeof window !== 'undefined' ? localStorage.getItem('datapay_user_id') || 'default_user' : 'default_user'}
+                  <span className="text-slate-400 font-medium">E-mail Vinculado:</span>
+                  <span className="text-slate-200 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
+                    {syncEmail || 'Nenhum e-mail vinculado'}
                   </span>
                 </div>
 
-                <p className="text-[9.5px] text-slate-500 leading-relaxed pt-3 border-t border-slate-850">
-                  **Como funciona:** O DataPay sincroniza automaticamente em segundo plano. Em caso de limpeza do cache local ou troca de dispositivo, seus dados de Dívidas, Pagamentos, Reservas e Metas serão totalmente recuperados utilizando este identificador exclusivo.
-                </p>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-medium">ID do Banco de Dados:</span>
+                  <span className="font-mono text-slate-350 text-[10px] bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
+                    {typeof window !== 'undefined' ? localStorage.getItem('datapay_user_id') || 'default_user' : 'default_user'}
+                  </span>
+                </div>
               </div>
 
-              <div className="pt-2">
+              {/* Form para vincular e-mail de sincronização multi-plataforma */}
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!emailInput.trim()) return;
+                setIsSyncing(true);
+                await connectSyncEmail(emailInput);
+                setIsSyncing(false);
+              }} className="space-y-4 bg-slate-950/20 border border-slate-850 p-5 rounded-2xl">
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-400 mb-1.5 block">Sincronizar Celular e Computador</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      required
+                      placeholder="Ex: seu-email@dominio.com"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-850 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSyncing}
+                      className="bg-indigo-600 hover:bg-indigo-750 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer transition-all active:scale-[0.98]"
+                    >
+                      Vincular Dispositivo
+                    </button>
+                  </div>
+                  <p className="text-[9.5px] text-slate-500 mt-2 leading-relaxed">
+                    **Como funciona:** Insira o **mesmo e-mail** no seu computador e no seu celular. Ao fazer isso, ambos os aparelhos compartilharão instantaneamente o mesmo banco de dados na nuvem!
+                  </p>
+                </div>
+              </form>
+
+              <div className="pt-2 flex gap-3">
                 <button
                   type="button"
                   onClick={handleSyncClick}
                   disabled={isSyncing}
-                  className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white text-xs font-bold px-5 py-3.5 rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-600/10"
+                  className="bg-slate-900 border border-slate-800 hover:bg-slate-855 text-slate-200 text-xs font-bold px-5 py-3.5 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
                 >
                   <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
                   <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Agora'}</span>

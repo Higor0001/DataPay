@@ -33,6 +33,8 @@ interface StateContextType {
   addNotification: (title: string, content: string, type: AppNotification['type']) => void;
   clearNotification: (id: string) => void;
   resetData: () => void;
+  syncEmail: string;
+  connectSyncEmail: (email: string) => Promise<void>;
 }
 
 const StateContext = createContext<StateContextType | undefined>(undefined);
@@ -79,13 +81,21 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [messages, setMessages] = useState<AIMessage[]>(initialMessages);
   const [supabaseConfig, setSupabaseConfig] = useState<{ url: string; anonKey: string } | null>(null);
   const [userId, setUserId] = useState<string>('');
+  const [syncEmail, setSyncEmail] = useState<string>('');
 
   // Load session userId and fetch current data from MongoDB on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const storedEmail = localStorage.getItem('datapay_sync_email') || '';
+      setSyncEmail(storedEmail);
+
       let storedUserId = localStorage.getItem('datapay_user_id');
       if (!storedUserId) {
-        storedUserId = 'user_' + Math.random().toString(36).substring(2, 11);
+        if (storedEmail) {
+          storedUserId = 'email_' + storedEmail.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+        } else {
+          storedUserId = 'user_' + Math.random().toString(36).substring(2, 11);
+        }
         localStorage.setItem('datapay_user_id', storedUserId);
       }
       setUserId(storedUserId);
@@ -107,6 +117,55 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .catch(err => console.error('[MongoDB Init Load Error]:', err));
     }
   }, []);
+
+  // Vincula o usuário a um e-mail para compartilhar o mesmo banco entre PC e celular
+  const connectSyncEmail = async (email: string) => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) return;
+
+    // Gera um ID determinístico baseado no e-mail
+    const newUserId = 'email_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('datapay_sync_email', cleanEmail);
+      localStorage.setItem('datapay_user_id', newUserId);
+    }
+
+    setSyncEmail(cleanEmail);
+    setUserId(newUserId);
+
+    try {
+      console.log(`[MongoDB Sync] Conectando ao e-mail ${cleanEmail} e baixando dados...`);
+      const res = await fetch(`/api/db/sync?userId=${newUserId}`);
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData.success && resData.data) {
+          const d = resData.data;
+          setDebts(d.debts || []);
+          setPayments(d.payments || []);
+          setReserve(d.reserve || { goalValue: 0, currentBalance: 0, history: [] });
+          setGoals(d.goals || []);
+          setNotifications(d.notifications || []);
+          
+          addNotification(
+            'Sincronização Ativada',
+            `Seus dados foram vinculados ao e-mail ${cleanEmail} com sucesso!`,
+            'success'
+          );
+        } else {
+          // Se não houver dados, o estado atual será enviado na próxima sincronização automática
+          addNotification(
+            'Sincronização Vinculada',
+            `Conectado ao e-mail ${cleanEmail}. Seus dados atuais serão salvos na nuvem.`,
+            'info'
+          );
+        }
+      }
+    } catch (err: any) {
+      console.error('[MongoDB Sync Connection Error]:', err);
+      addNotification('Erro de Conexão', 'Não foi possível baixar os dados da nuvem.', 'alert');
+    }
+  };
 
   // Sincronização automática em lote em background ao detectar modificações no estado local
   useEffect(() => {
@@ -893,7 +952,9 @@ Você pode sugerir uma portabilidade de crédito para outros bancos (ex: Banco I
         syncWithMongoDB,
         addNotification,
         clearNotification,
-        resetData
+        resetData,
+        syncEmail,
+        connectSyncEmail
       }}
     >
       {children}
