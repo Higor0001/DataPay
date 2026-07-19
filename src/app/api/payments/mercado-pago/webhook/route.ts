@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { connectToDatabase } from '@/utils/mongodb';
+import crypto from 'crypto';
+
+// Valida a assinatura x-signature do Mercado Pago para assegurar a autenticidade do webhook
+function verifySignature(xSignature: string, xRequestId: string, dataId: string, secretKey: string): boolean {
+  try {
+    const parts = xSignature.split(',');
+    const tsPart = parts.find(p => p.trim().startsWith('ts='));
+    const v1Part = parts.find(p => p.trim().startsWith('v1='));
+    
+    if (!tsPart || !v1Part) return false;
+    
+    const ts = tsPart.split('=')[1];
+    const v1 = v1Part.split('=')[1];
+    
+    const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+    
+    const hmac = crypto.createHmac('sha256', secretKey);
+    hmac.update(manifest);
+    const expectedSignature = hmac.digest('hex');
+    
+    return expectedSignature === v1;
+  } catch (err) {
+    return false;
+  }
+}
 
 // Busca a mesma referência de memória global para obter as transações ativas
 const globalTransactions = (global as any).paymentTransactions || new Map();
@@ -24,6 +49,25 @@ export async function POST(req: NextRequest) {
     }
 
     const transactionId = String(paymentId);
+    const isSandboxSimulated = transactionId.startsWith('sandbox_mp_') || payload.simulated;
+
+    // Validação da assinatura para webhooks de produção
+    const xSignature = req.headers.get('x-signature');
+    const xRequestId = req.headers.get('x-request-id');
+    const webhookSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
+
+    if (!isSandboxSimulated && webhookSecret && xSignature && xRequestId) {
+      console.log('[DataPay Webhook] Validando assinatura x-signature do Mercado Pago...');
+      const isValid = verifySignature(xSignature, xRequestId, transactionId, webhookSecret);
+      if (!isValid) {
+        console.error('[DataPay Webhook] Assinatura inválida! Descartando notificação suspeita.');
+        return NextResponse.json(
+          { error: 'Assinatura inválida. Acesso proibido.' },
+          { status: 403 }
+        );
+      }
+      console.log('[DataPay Webhook] Assinatura validada com sucesso.');
+    }
 
     // 1. SUPORTE PARA O SIMULADOR DO SANDBOX LOCAL (OFFLINE / DEV)
     if (transactionId.startsWith('sandbox_mp_') || payload.simulated) {
