@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-19T06:43:05.659Z",
+  "errorMessage": "Unauthorized use of live credentials",
+  "rawError": {
+    "cause": [
+      {
+        "code": 7,
+        "data": "19-07-2026T06:43:05UTC;5757fa5c-2c9b-4097-bf10-cc7769898031",
+        "description": "Unauthorized use of live credentials"
+      }
+    ],
+    "error": "unauthorized",
+    "message": "Unauthorized use of live credentials",
+    "status": 401
+  },
+  "tokenUsed": "APP_USR-598138733717..."
+}

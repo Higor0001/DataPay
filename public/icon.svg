@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#1e1b4b" />
+    </linearGradient>
+    
+    <!-- Shield / Accent Glowing Gradient -->
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+    
+    <!-- Neon Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Base App Background (Rounded Maskable Square) -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Inner Glowing Shield Outline -->
+  <rect x="64" y="64" width="384" height="384" rx="80" fill="none" stroke="url(#accentGrad)" stroke-width="12" opacity="0.15" />
+
+  <!-- Centered DataPay Shield Logo with Glow -->
+  <g filter="url(#glow)">
+    <!-- Main Check & Arrow Shield Emblem -->
+    <path d="M256,120 L370,160 L370,280 C370,350 318,405 256,420 C194,405 142,350 142,280 L142,160 Z" 
+          fill="none" 
+          stroke="url(#accentGrad)" 
+          stroke-width="20" 
+          stroke-linejoin="round" />
+
+    <!-- Coin Icon in the Center -->
+    <circle cx="256" cy="270" r="54" fill="#0f172a" stroke="#6366f1" stroke-width="12" />
+    
+    <!-- Checkmark representing Quittance / Success -->
+    <path d="M228,272 L248,292 L288,248" 
+          fill="none" 
+          stroke="#10b981" 
+          stroke-width="10" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+  </g>
+</svg>

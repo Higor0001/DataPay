@@ -1,0 +1,18 @@
+{
+  "short_name": "DataPay",
+  "name": "DataPay - Gestão Inteligente de Dívidas",
+  "description": "Assistente financeiro inteligente para controle, planejamento e amortização de dívidas.",
+  "start_url": "/",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}
