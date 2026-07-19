@@ -35,7 +35,7 @@ export const SettingsView: React.FC = () => {
     withdrawReserve,
     supabaseConfig,
     saveSupabaseConfig,
-    syncWithSupabase,
+    syncWithMongoDB,
     resetData,
     addNotification
   } = useAppState();
@@ -98,7 +98,7 @@ export const SettingsView: React.FC = () => {
 
   const handleSyncClick = async () => {
     setIsSyncing(true);
-    await syncWithSupabase();
+    await syncWithMongoDB();
     setIsSyncing(false);
   };
 
@@ -201,7 +201,7 @@ export const SettingsView: React.FC = () => {
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Banco de Dados Supabase
+          Backup em Nuvem
         </button>
         <button
           onClick={() => setActiveSettingsTab('security')}
@@ -374,6 +374,7 @@ export const SettingsView: React.FC = () => {
           )}
 
           {/* Tab 2: Supabase connection */}
+          {/* Tab 2: MongoDB connection */}
           {activeSettingsTab === 'supabase' && (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
@@ -381,52 +382,42 @@ export const SettingsView: React.FC = () => {
                   <Database className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white text-sm">Backup em Nuvem PostgreSQL</h3>
-                  <p className="text-[10px] text-slate-400">Salve seus dados na sua própria infraestrutura Supabase de forma gratuita.</p>
+                  <h3 className="font-bold text-white text-sm">Sincronização em Nuvem (MongoDB)</h3>
+                  <p className="text-[10px] text-slate-400">Salve seus dados na nuvem com segurança e acesse de qualquer dispositivo.</p>
                 </div>
               </div>
 
-              <form onSubmit={handleSaveSb} className="space-y-4">
-                <div>
-                  <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider mb-1 block">Supabase URL</label>
-                  <input
-                    type="url"
-                    placeholder="Ex: https://xxxxxx.supabase.co"
-                    value={sbUrl}
-                    onChange={(e) => setSbUrl(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
+              <div className="p-5 bg-slate-950/20 border border-slate-850 rounded-2xl text-xs space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-medium">Status da Conexão:</span>
+                  <span className="text-emerald-400 font-extrabold flex items-center gap-1">
+                    <Check className="h-4 w-4" /> Conectado (MongoDB)
+                  </span>
                 </div>
                 
-                <div>
-                  <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wider mb-1 block">Anon Public API Key</label>
-                  <input
-                    type="password"
-                    placeholder="Ex: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                    value={sbKey}
-                    onChange={(e) => setSbKey(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-medium">ID de Usuário Sincronizado:</span>
+                  <span className="font-mono text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
+                    {typeof window !== 'undefined' ? localStorage.getItem('datapay_user_id') || 'default_user' : 'default_user'}
+                  </span>
                 </div>
 
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-750 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
-                  >
-                    Salvar Chaves
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSyncClick}
-                    disabled={isSyncing}
-                    className="bg-slate-950 border border-slate-850 hover:bg-slate-850 text-slate-350 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                    <span>{isSyncing ? 'Sincronizando...' : 'Fazer Sincronização Backup'}</span>
-                  </button>
-                </div>
-              </form>
+                <p className="text-[9.5px] text-slate-500 leading-relaxed pt-3 border-t border-slate-850">
+                  **Como funciona:** O DataPay sincroniza automaticamente em segundo plano. Em caso de limpeza do cache local ou troca de dispositivo, seus dados de Dívidas, Pagamentos, Reservas e Metas serão totalmente recuperados utilizando este identificador exclusivo.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleSyncClick}
+                  disabled={isSyncing}
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white text-xs font-bold px-5 py-3.5 rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-600/10"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Agora'}</span>
+                </button>
+              </div>
             </div>
           )}
 

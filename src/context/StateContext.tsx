@@ -29,7 +29,7 @@ interface StateContextType {
   deleteReserveHistoryItem: (id: string) => void;
   deletePayment: (id: string) => void;
   askAI: (query: string) => void;
-  syncWithSupabase: () => Promise<boolean>;
+  syncWithMongoDB: () => Promise<boolean>;
   addNotification: (title: string, content: string, type: AppNotification['type']) => void;
   clearNotification: (id: string) => void;
   resetData: () => void;
@@ -78,10 +78,18 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [notifications, setNotifications] = useState<AppNotification[]>(initialNotifications);
   const [messages, setMessages] = useState<AIMessage[]>(initialMessages);
   const [supabaseConfig, setSupabaseConfig] = useState<{ url: string; anonKey: string } | null>(null);
+  const [userId, setUserId] = useState<string>('');
 
-  // Load from localStorage
+  // Load from localStorage and fetch from MongoDB
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      let storedUserId = localStorage.getItem('datapay_user_id');
+      if (!storedUserId) {
+        storedUserId = 'user_' + Math.random().toString(36).substring(2, 11);
+        localStorage.setItem('datapay_user_id', storedUserId);
+      }
+      setUserId(storedUserId);
+
       const storedDebts = localStorage.getItem('agy_debts');
       const storedPayments = localStorage.getItem('agy_payments');
       const storedReserve = localStorage.getItem('agy_reserve');
@@ -99,6 +107,37 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (storedNotifications) setNotifications(JSON.parse(storedNotifications));
       if (storedMessages) setMessages(JSON.parse(storedMessages));
       if (storedSupabase) setSupabaseConfig(JSON.parse(storedSupabase));
+
+      // Busca dados sincronizados na nuvem via MongoDB
+      fetch(`/api/db/sync?userId=${storedUserId}`)
+        .then(res => res.json())
+        .then(resData => {
+          if (resData.success && resData.data) {
+            const d = resData.data;
+            if (d.debts && d.debts.length > 0) {
+              setDebts(d.debts);
+              localStorage.setItem('agy_debts', JSON.stringify(d.debts));
+            }
+            if (d.payments && d.payments.length > 0) {
+              setPayments(d.payments);
+              localStorage.setItem('agy_payments', JSON.stringify(d.payments));
+            }
+            if (d.reserve && (d.reserve.goalValue > 0 || d.reserve.currentBalance > 0 || d.reserve.history.length > 0)) {
+              setReserve(d.reserve);
+              localStorage.setItem('agy_reserve', JSON.stringify(d.reserve));
+            }
+            if (d.goals && d.goals.length > 0) {
+              setGoals(d.goals);
+              localStorage.setItem('agy_goals', JSON.stringify(d.goals));
+            }
+            if (d.notifications && d.notifications.length > 0) {
+              setNotifications(d.notifications);
+              localStorage.setItem('agy_notifications', JSON.stringify(d.notifications));
+            }
+            console.log('[MongoDB Sync] Loaded data from cloud successfully.');
+          }
+        })
+        .catch(err => console.error('[MongoDB Init Load Error]:', err));
     }
   }, []);
 
@@ -662,167 +701,44 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return `${padded.substring(0, 8)}-${padded.substring(8, 12)}-${padded.substring(12, 16)}-${padded.substring(16, 20)}-${padded.substring(20, 32)}`;
   };
 
-  const syncWithSupabase = async (): Promise<boolean> => {
-    if (!supabaseConfig) {
-      addNotification(
-        'Erro na Sincronização',
-        'Supabase não configurado. Por favor, insira as credenciais na aba de Ajustes.',
-        'alert'
-      );
-      return false;
-    }
-
+  const syncWithMongoDB = async (): Promise<boolean> => {
     try {
-      console.log('[Supabase Sync] Inicializando cliente Supabase...');
-      const supabase = createClient(supabaseConfig.url, supabaseConfig.anonKey);
+      console.log('[MongoDB Sync] Sincronizando dados com o MongoDB...');
+      const res = await fetch('/api/db/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId,
+          debts,
+          payments,
+          reserve,
+          goals,
+          notifications
+        })
+      });
 
-      // 1. Autenticar usuário
-      let { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        console.log('[Supabase Sync] Usuário não autenticado. Tentando login anônimo...');
-        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
-        if (anonError) {
-          throw new Error(`Falha na autenticação anônima: ${anonError.message}`);
-        }
-        user = anonData.user;
+      if (!res.ok) {
+        throw new Error('Erro na resposta do servidor.');
       }
 
-      if (!user) {
-        throw new Error('Não foi possível obter um usuário autenticado.');
-      }
-
-      const userId = user.id;
-      console.log('[Supabase Sync] Autenticado com User ID:', userId);
-
-      // 2. Upsert Reservas (reserves)
-      console.log('[Supabase Sync] Sincronizando reservas...');
-      const { error: reserveErr } = await supabase
-        .from('reserves')
-        .upsert({
-          user_id: userId,
-          goal_value: reserve.goalValue,
-          current_balance: reserve.currentBalance,
-          updated_at: new Date().toISOString()
-        });
-      if (reserveErr) throw reserveErr;
-
-      // 3. Upsert Histórico de Reservas (reserve_history)
-      if (reserve.history.length > 0) {
-        console.log('[Supabase Sync] Sincronizando histórico de reservas...');
-        const dbHistory = reserve.history.map(item => ({
-          id: toUUID(item.id),
-          user_id: userId,
-          amount: item.amount,
-          type: item.type,
-          description: item.description,
-          date: item.date
-        }));
-        const { error: histErr } = await supabase
-          .from('reserve_history')
-          .upsert(dbHistory);
-        if (histErr) throw histErr;
-      }
-
-      // 4. Upsert Dívidas (debts)
-      if (debts.length > 0) {
-        console.log('[Supabase Sync] Sincronizando dívidas...');
-        const dbDebts = debts.map(d => ({
-          id: toUUID(d.id),
-          user_id: userId,
-          name: d.name,
-          bank: d.bank,
-          type: d.type,
-          original_value: d.originalValue,
-          current_balance: d.currentBalance,
-          interest_rate: d.interestRate,
-          cet: d.cet,
-          iof: d.iof,
-          fine: d.fine,
-          delay_fee: d.delayFee,
-          contract_date: d.contractDate,
-          due_date: d.dueDate,
-          next_due_date: d.nextDueDate,
-          total_installments: d.totalInstallments,
-          remaining_installments: d.remainingInstallments,
-          installment_value: d.installmentValue,
-          index_used: d.indexUsed,
-          notes: d.notes,
-          status: d.status
-        }));
-        const { error: debtsErr } = await supabase
-          .from('debts')
-          .upsert(dbDebts);
-        if (debtsErr) throw debtsErr;
-      }
-
-      // 5. Upsert Pagamentos (payments)
-      if (payments.length > 0) {
-        console.log('[Supabase Sync] Sincronizando pagamentos...');
-        const dbPayments = payments.map(p => ({
-          id: toUUID(p.id),
-          user_id: userId,
-          debt_id: toUUID(p.debtId),
-          amount: p.amount,
-          due_date: p.dueDate,
-          paid_date: p.paidDate || null,
-          status: p.status,
-          method: p.method,
-          type: p.type
-        }));
-        const { error: paymentsErr } = await supabase
-          .from('payments')
-          .upsert(dbPayments);
-        if (paymentsErr) throw paymentsErr;
-      }
-
-      // 6. Upsert Metas (goals)
-      if (goals.length > 0) {
-        console.log('[Supabase Sync] Sincronizando metas...');
-        const dbGoals = goals.map(g => ({
-          id: toUUID(g.id),
-          user_id: userId,
-          name: g.name,
-          target_value: g.targetValue,
-          current_value: g.currentValue,
-          type: g.type,
-          deadline: g.deadline,
-          accumulated_savings: g.accumulatedSavings
-        }));
-        const { error: goalsErr } = await supabase
-          .from('goals')
-          .upsert(dbGoals);
-        if (goalsErr) throw goalsErr;
-      }
-
-      // 7. Upsert Notificações (notifications)
-      if (notifications.length > 0) {
-        console.log('[Supabase Sync] Sincronizando notificações...');
-        const dbNotifications = notifications.map(n => ({
-          id: toUUID(n.id),
-          user_id: userId,
-          title: n.title,
-          content: n.content,
-          type: n.type,
-          read: n.read,
-          date: n.date
-        }));
-        const { error: notifErr } = await supabase
-          .from('notifications')
-          .upsert(dbNotifications);
-        if (notifErr) throw notifErr;
+      const resData = await res.json();
+      if (!resData.success) {
+        throw new Error(resData.error || 'Erro ao sincronizar.');
       }
 
       addNotification(
         'Sincronização Concluída',
-        'Todos os dados locais foram salvos com criptografia na sua conta PostgreSQL Supabase.',
+        'Todos os dados foram salvos com sucesso no MongoDB na nuvem.',
         'success'
       );
       return true;
     } catch (error: any) {
-      console.error('[Supabase Sync Error] Falha na sincronização:', error);
+      console.error('[MongoDB Sync Error] Falha na sincronização:', error);
       addNotification(
         'Falha na Sincronização',
-        `Erro ao enviar dados para o Supabase: ${error.message || error}`,
+        `Erro ao enviar dados para o MongoDB: ${error.message || error}`,
         'alert'
       );
       return false;
@@ -985,7 +901,7 @@ Você pode sugerir uma portabilidade de crédito para outros bancos (ex: Banco I
         deleteReserveHistoryItem,
         deletePayment,
         askAI,
-        syncWithSupabase,
+        syncWithMongoDB,
         addNotification,
         clearNotification,
         resetData
