@@ -31,6 +31,13 @@ function verifySignature(xSignature: string, xRequestId: string, dataId: string,
 const globalTransactions = (global as any).paymentTransactions || new Map();
 (global as any).paymentTransactions = globalTransactions;
 
+export async function GET() {
+  return NextResponse.json({
+    success: true,
+    message: 'DataPay Mercado Pago Webhook is active and running.'
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const payload = await req.json();
