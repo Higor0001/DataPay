@@ -1,10 +1,25 @@
 /**
  * Gerador dinâmico de arquivos de macro do MacroDroid (.macro) para o DataPay Central Pix.
- * Cria o JSON estruturado 100% compatível com a especificação do aplicativo MacroDroid Android.
+ * Suporta tanto a hospedagem em produção (Vercel HTTPS) quanto redes locais (Wi-Fi IP/HTTP).
  */
-export function generateMacroDroidConfig(targetIpOrDomain = '192.168.100.21', port = '3000'): string {
-  const cleanHost = targetIpOrDomain.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-  const fullUrl = `http://${cleanHost}:${port}/api/v1/pix`;
+export function generateMacroDroidConfig(targetHost = 'data-pay-omega.vercel.app'): string {
+  let cleanHost = targetHost.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  
+  const isLocal = cleanHost.startsWith('192.168.') || 
+                  cleanHost.startsWith('10.') || 
+                  cleanHost.startsWith('localhost') || 
+                  cleanHost.startsWith('127.');
+
+  const protocol = isLocal ? 'http' : 'https';
+
+  let fullUrl = '';
+  if (cleanHost.includes(':')) {
+    fullUrl = `${protocol}://${cleanHost}/api/v1/pix`;
+  } else if (isLocal) {
+    fullUrl = `${protocol}://${cleanHost}:3000/api/v1/pix`;
+  } else {
+    fullUrl = `${protocol}://${cleanHost}/api/v1/pix`;
+  }
 
   const macroStructure = {
     globalVariables: [],
@@ -108,14 +123,15 @@ export function generateMacroDroidConfig(targetIpOrDomain = '192.168.100.21', po
 /**
  * Dispara o download do arquivo .macro direto no navegador do usuário
  */
-export function downloadMacroDroidFile(ipAddress = '192.168.100.21') {
-  const jsonContent = generateMacroDroidConfig(ipAddress);
+export function downloadMacroDroidFile(hostOrIp = 'data-pay-omega.vercel.app') {
+  const jsonContent = generateMacroDroidConfig(hostOrIp);
   const blob = new Blob([jsonContent], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   
+  const cleanName = hostOrIp.replace(/^https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '_');
   const a = document.createElement('a');
   a.href = url;
-  a.download = `DataPay_Pix_CopiaeCola_${ipAddress.replace(/[^a-zA-Z0-9]/g, '_')}.macro`;
+  a.download = `DataPay_Pix_${cleanName}.macro`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

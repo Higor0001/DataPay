@@ -58,6 +58,16 @@ export const CentralPixView: React.FC = () => {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [isQrLoading, setIsQrLoading] = useState<boolean>(false);
 
+  // Detecta dinamicamente se o app está no Vercel (produção) ou IP local
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const currentHost = window.location.host;
+      if (currentHost && !currentHost.includes('localhost') && !currentHost.includes('127.0.0.1')) {
+        setMacroIpAddress(currentHost);
+      }
+    }
+  }, []);
+
   // Late Payment modal state
   const [showLateModal, setShowLateModal] = useState(false);
   const [realPaymentDate, setRealPaymentDate] = useState('2026-07-21');
@@ -819,19 +829,29 @@ export const CentralPixView: React.FC = () => {
 
             <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs space-y-3">
               <div>
-                <span className="text-slate-400 block mb-1">📲 URL para usar no Celular (Mesma rede Wi-Fi):</span>
+                <span className="text-slate-400 block mb-1">
+                  {macroIpAddress.includes('vercel.app') || (!macroIpAddress.includes('localhost') && !macroIpAddress.includes('192.168.'))
+                    ? '🌍 URL de Produção Global (Funciona em 4G/5G/Wi-Fi):'
+                    : '📲 URL para usar no Celular (Mesma rede Wi-Fi):'}
+                </span>
                 <p className="text-emerald-400 font-bold select-all bg-emerald-950/40 p-2 rounded border border-emerald-500/30 text-sm">
-                  POST http://192.168.100.21:3000/api/v1/pix
+                  {macroIpAddress.includes('vercel.app') || (!macroIpAddress.includes('localhost') && !macroIpAddress.includes('192.168.'))
+                    ? `POST https://${macroIpAddress}/api/v1/pix`
+                    : macroIpAddress.includes(':')
+                      ? `POST http://${macroIpAddress}/api/v1/pix`
+                      : `POST http://${macroIpAddress}:3000/api/v1/pix`}
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-800/80">
-                <span className="text-slate-500 block mb-1">💻 URL para requisições no próprio PC:</span>
-                <p className="text-slate-300 select-all">POST http://localhost:3000/api/v1/pix</p>
-              </div>
+              {macroIpAddress.includes('localhost') && (
+                <div className="pt-2 border-t border-slate-800/80">
+                  <span className="text-slate-500 block mb-1">💻 URL para requisições no próprio PC:</span>
+                  <p className="text-slate-300 select-all">POST http://localhost:3000/api/v1/pix</p>
+                </div>
+              )}
 
               <div className="text-[11px] text-amber-400 bg-amber-950/30 p-2.5 rounded-lg border border-amber-800/40 font-sans">
-                💡 <strong>Dica Importante:</strong> No celular, <code>localhost</code> aponta para o próprio telefone. Para enviar dados do smartphone Android ao seu PC, use a URL com o IP da sua rede Wi-Fi (<code>http://192.168.100.21:3000/api/v1/pix</code>).
+                💡 <strong>Dica do Hospedado (Vercel):</strong> Quando o site está no Vercel (<code>data-pay-omega.vercel.app</code>), a API funciona globalmente! Basta colocar <code>https://data-pay-omega.vercel.app/api/v1/pix</code> no MacroDroid que funcionará em qualquer Wi-Fi ou 4G/5G do mundo sem precisar de IP local.
               </div>
             </div>
 
@@ -851,13 +871,13 @@ export const CentralPixView: React.FC = () => {
 
               <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                 <div className="w-full sm:w-auto flex-1">
-                  <label className="text-[10px] text-slate-400 font-medium block mb-1">IP do Computador na Rede Wi-Fi:</label>
+                  <label className="text-[10px] text-slate-400 font-medium block mb-1">Domínio de Hospedagem ou IP da Rede:</label>
                   <input
                     type="text"
                     value={macroIpAddress}
                     onChange={(e) => setMacroIpAddress(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
-                    placeholder="192.168.100.21"
+                    placeholder="data-pay-omega.vercel.app"
                   />
                 </div>
 
