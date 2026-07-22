@@ -29,7 +29,9 @@ import {
   TrendingUp,
   RotateCcw,
   Plus,
-  Download
+  Download,
+  UserCheck,
+  Edit3
 } from 'lucide-react';
 
 // Mocks iniciais para pré-carregar a fila do Central Pix com dados realistas
@@ -57,6 +59,19 @@ export const CentralPixView: React.FC = () => {
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [isQrLoading, setIsQrLoading] = useState<boolean>(false);
+
+  // Estado para armazenar correções humanas manuais do vínculo da dívida (receiptId -> debtId)
+  const [manualDebtOverrides, setManualDebtOverrides] = useState<Record<string, string>>({});
+
+  const getEffectiveDebtId = useCallback((receipt: PixReceiptItem): string => {
+    if (manualDebtOverrides[receipt.id]) {
+      return manualDebtOverrides[receipt.id];
+    }
+    if (receipt.prediction?.debtId) {
+      return receipt.prediction.debtId;
+    }
+    return debts[0]?.id || '';
+  }, [manualDebtOverrides, debts]);
 
   // Detecta dinamicamente se o app está no Vercel (produção) ou IP local
   useEffect(() => {
@@ -201,8 +216,9 @@ export const CentralPixView: React.FC = () => {
         }
       } else if (e.key === 'y' || e.key === 'Y') {
         e.preventDefault();
-        if (selectedReceipt && selectedReceipt.prediction) {
-          handleConfirmPayment(selectedReceipt.id, selectedReceipt.prediction.debtId, selectedReceipt.prediction.confidenceScore);
+        if (selectedReceipt) {
+          const debtId = getEffectiveDebtId(selectedReceipt);
+          handleConfirmPayment(selectedReceipt.id, debtId);
         }
       } else if (e.key === 'd' || e.key === 'D') {
         e.preventDefault();
@@ -214,7 +230,7 @@ export const CentralPixView: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pixReceipts, selectedReceiptId, selectedReceipt]);
+  }, [pixReceipts, selectedReceiptId, selectedReceipt, getEffectiveDebtId]);
 
   // Handler para adicionar novo Pix manualmente ou via simulador
   const handleAddRawPix = (codeToParse?: string) => {
@@ -252,16 +268,20 @@ export const CentralPixView: React.FC = () => {
   };
 
   // Handler para confirmar associação e pagar
-  const handleConfirmPayment = (receiptId: string, debtId: string, confidence: number) => {
+  const handleConfirmPayment = (receiptId: string, optionalDebtId?: string, confidence?: number) => {
     const receipt = pixReceipts.find(r => r.id === receiptId);
     if (!receipt) return;
 
+    const debtId = optionalDebtId || getEffectiveDebtId(receipt);
     const targetDebt = debts.find(d => d.id === debtId);
-    const amountToPay = receipt.decoded.amount || targetDebt?.installmentValue || 0;
 
-    if (targetDebt) {
-      payInstallment(targetDebt.id, amountToPay, 'Pix');
+    if (!debtId || !targetDebt) {
+      addNotification('Selecione uma Dívida', 'Por favor, escolha uma dívida no menu de Correção Humana para vincular o pagamento.', 'alert');
+      return;
     }
+
+    const amountToPay = receipt.decoded.amount || targetDebt.installmentValue || 0;
+    payInstallment(targetDebt.id, amountToPay, 'Pix');
 
     setPixReceipts(prev =>
       prev.map(r =>
@@ -277,22 +297,26 @@ export const CentralPixView: React.FC = () => {
       )
     );
 
+    const isManual = manualDebtOverrides[receiptId] ? ' (Correção Humana Aplicada)' : '';
     addNotification(
       'Pagamento Vinculado e Quitado',
-      `Pix de R$ ${amountToPay.toFixed(2)} foi vinculado à dívida "${targetDebt?.name}" com sucesso! (Confiança IA: ${Math.round(confidence * 100)}%)`,
+      `Pix de R$ ${amountToPay.toFixed(2)} foi vinculado à dívida "${targetDebt.name}" com sucesso!${isManual}`,
       'success'
     );
   };
 
   // Handler para pagamento parcial
   const handleConfirmPartialPayment = () => {
-    if (!selectedReceipt || !selectedReceipt.prediction || partialAmount <= 0) return;
-    const debtId = selectedReceipt.prediction.debtId;
+    if (!selectedReceipt || partialAmount <= 0) return;
+    const debtId = getEffectiveDebtId(selectedReceipt);
     const targetDebt = debts.find(d => d.id === debtId);
 
-    if (targetDebt) {
-      payInstallment(targetDebt.id, partialAmount, 'Pix');
+    if (!targetDebt) {
+      addNotification('Selecione uma Dívida', 'Escolha uma dívida no menu de Correção Humana para vincular o pagamento parcial.', 'alert');
+      return;
     }
+
+    payInstallment(targetDebt.id, partialAmount, 'Pix');
 
     setPixReceipts(prev =>
       prev.map(r =>
@@ -309,22 +333,26 @@ export const CentralPixView: React.FC = () => {
     );
 
     setShowPartialModal(false);
-    addNotification('Pagamento Parcial Registrado', `Pago R$ ${partialAmount.toFixed(2)} referente a ${targetDebt?.name}.`, 'warning');
+    addNotification('Pagamento Parcial Registrado', `Pago R$ ${partialAmount.toFixed(2)} referente a ${targetDebt.name}.`, 'warning');
   };
 
   // Handler para pagamento em atraso com recalculamento retroativo
   const handleConfirmLatePayment = () => {
-    if (!selectedReceipt || !selectedReceipt.prediction || realPaidAmount <= 0) return;
-    const debtId = selectedReceipt.prediction.debtId;
+    if (!selectedReceipt || realPaidAmount <= 0) return;
+    const debtId = getEffectiveDebtId(selectedReceipt);
     const targetDebt = debts.find(d => d.id === debtId);
 
-    const dueDate = new Date(selectedReceipt.prediction.dueDate);
+    if (!targetDebt) {
+      addNotification('Selecione uma Dívida', 'Escolha uma dívida no menu de Correção Humana para vincular o pagamento atrasado.', 'alert');
+      return;
+    }
+
+    const dueDateStr = selectedReceipt.prediction?.dueDate || targetDebt.dueDate || new Date().toISOString();
+    const dueDate = new Date(dueDateStr);
     const paidDate = new Date(realPaymentDate);
     const daysLate = Math.max(0, Math.floor((paidDate.getTime() - dueDate.getTime()) / (1000 * 3600 * 24)));
 
-    if (targetDebt) {
-      payInstallment(targetDebt.id, realPaidAmount, 'Pix');
-    }
+    payInstallment(targetDebt.id, realPaidAmount, 'Pix');
 
     setPixReceipts(prev =>
       prev.map(r =>
@@ -344,7 +372,7 @@ export const CentralPixView: React.FC = () => {
     setShowLateModal(false);
     addNotification(
       'Pagamento Atrasado Registrado',
-      `Pago R$ ${realPaidAmount.toFixed(2)} (${daysLate} dias de atraso). O histórico de juros foi contabilizado sem alterar o valor base das parcelas futuras.`,
+      `Pago R$ ${realPaidAmount.toFixed(2)} (${daysLate} dias de atraso) para a dívida "${targetDebt.name}".`,
       'info'
     );
   };
@@ -594,17 +622,23 @@ export const CentralPixView: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Indicação da Associação da Dívida */}
-                        {pred && (
-                          <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px]">
-                            <span className="text-slate-400 truncate">
-                              Dívida: <strong className="text-slate-200">{pred.debtName}</strong>
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              P. {pred.installmentNumber}/{pred.totalInstallments}
-                            </span>
-                          </div>
-                        )}
+                        {/* Indicação da Associação da Dívida (IA ou Correção Humana) */}
+                        {(() => {
+                          const effId = getEffectiveDebtId(receipt);
+                          const linkedDebt = debts.find(d => d.id === effId);
+                          const isManual = !!manualDebtOverrides[receipt.id];
+                          if (!linkedDebt) return null;
+                          return (
+                            <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px]">
+                              <span className="text-slate-400 truncate">
+                                Dívida: <strong className={isManual ? "text-purple-300 font-bold" : "text-slate-200"}>{linkedDebt.name}</strong>
+                              </span>
+                              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${isManual ? "bg-purple-950 text-purple-300 border border-purple-800/60" : "text-slate-500"}`}>
+                                {isManual ? '👤 Manual' : `P. ${pred?.installmentNumber || 1}/${pred?.totalInstallments || 12}`}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
@@ -640,6 +674,49 @@ export const CentralPixView: React.FC = () => {
                       QR Code Gigante [Enter]
                     </button>
                   </div>
+                </div>
+
+                {/* Seletor de Correção Humana (Permite alterar qual dívida será vinculada ao Pix) */}
+                <div className="p-4 bg-slate-900/90 rounded-2xl border border-emerald-500/30 space-y-2.5 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold text-white flex items-center gap-2">
+                      <UserCheck className="h-4 w-4 text-emerald-400" />
+                      Correção Humana (Vincular à Dívida Desejada)
+                    </label>
+                    {manualDebtOverrides[selectedReceipt.id] ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
+                        <Edit3 className="h-3 w-3" /> Alterado Manualmente pelo Usuário
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        IA Sugestão Automática
+                      </span>
+                    )}
+                  </div>
+
+                  <select
+                    value={getEffectiveDebtId(selectedReceipt)}
+                    onChange={(e) => {
+                      const newDebtId = e.target.value;
+                      setManualDebtOverrides(prev => ({ ...prev, [selectedReceipt.id]: newDebtId }));
+                      const matched = debts.find(d => d.id === newDebtId);
+                      addNotification('Correção Humana Aplicada', `Pix vinculado à dívida "${matched?.name || 'Selecionada'}".`, 'info');
+                    }}
+                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-emerald-500 cursor-pointer shadow-inner"
+                  >
+                    {debts.length === 0 ? (
+                      <option value="">Nenhuma dívida cadastrada no sistema</option>
+                    ) : (
+                      debts.map(d => {
+                        const isPredicted = selectedReceipt.prediction?.debtId === d.id;
+                        return (
+                          <option key={d.id} value={d.id}>
+                            {d.name} — Parcela R$ {d.installmentValue.toFixed(2)} ({d.bank}) {isPredicted ? ' 🎯 [Sugestão IA]' : ''}
+                          </option>
+                        );
+                      })
+                    )}
+                  </select>
                 </div>
 
                 {/* Box de Predição e Diagnóstico da IA */}
@@ -818,14 +895,10 @@ export const CentralPixView: React.FC = () => {
                 {/* Ações do State Machine (Botoes de Ação) */}
                 <div className="pt-2 flex flex-wrap items-center gap-3">
                   <button
-                    onClick={() =>
-                      selectedReceipt.prediction &&
-                      handleConfirmPayment(
-                        selectedReceipt.id,
-                        selectedReceipt.prediction.debtId,
-                        selectedReceipt.prediction.confidenceScore
-                      )
-                    }
+                    onClick={() => {
+                      const debtId = getEffectiveDebtId(selectedReceipt);
+                      handleConfirmPayment(selectedReceipt.id, debtId);
+                    }}
                     className="flex-1 min-w-[200px] py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
                   >
                     <CheckCircle2 className="h-4 w-4" />
