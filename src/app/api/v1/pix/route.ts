@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { decodeEMVPix } from '../../../../utils/emvPixParser';
+import { connectToDatabase } from '../../../../utils/mongodb';
 
-// Declaração do buffer global em memória para persistir mensagens recebidas via MacroDroid/REST
+// Memory buffer fallback
 declare global {
   var pixQueueBuffer: Array<{
     id: string;
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
 
-    // Suporta qualquer nome de parâmetro comum enviado pelo MacroDroid / Tasker / cURL
+    // Suporta qualquer campo de payload comum do MacroDroid / Tasker / cURL
     const rawCode = body.codigo || body.pixCode || body.payload || body.text || body.clipboard;
 
     if (!rawCode || typeof rawCode !== 'string' || !rawCode.trim()) {
@@ -57,23 +58,35 @@ export async function POST(request: Request) {
       status: 'PENDING' as const
     };
 
-    // Insere no topo da fila em memória
-    globalThis.pixQueueBuffer.unshift(newItem);
+    // 1. Tenta salvar no MongoDB Cloud Atlas para persistência 100% garantida entre lambdas do Vercel
+    let savedInMongo = false;
+    try {
+      const { db } = await connectToDatabase();
+      await db.collection('CentralPix').updateOne(
+        { id: newItem.id },
+        { $set: newItem },
+        { upsert: true }
+      );
+      savedInMongo = true;
+      console.log(`[API /api/v1/pix] Item salvo com SUCESSO no MongoDB Cloud Atlas! ID: ${queueId}`);
+    } catch (mongoErr: any) {
+      console.warn('[API /api/v1/pix] MongoDB indisponível, usando fallback em memória:', mongoErr.message);
+    }
 
-    // Limita o buffer em memória aos últimos 50 itens
+    // 2. Adiciona também ao buffer em memória local
+    globalThis.pixQueueBuffer.unshift(newItem);
     if (globalThis.pixQueueBuffer.length > 50) {
       globalThis.pixQueueBuffer = globalThis.pixQueueBuffer.slice(0, 50);
     }
-
-    console.log(`[API /api/v1/pix] Novo Pix inserido com sucesso na fila! ID: ${queueId}, Beneficiario: ${decodeResult.decoded.merchantName}`);
 
     return NextResponse.json(
       {
         status: 'accepted',
         queue_id: queueId,
-        message: 'Pix recebido e adicionado à Fila Inteligente do Central Pix com sucesso.',
+        message: 'Pix recebido e adicionado à Fila Inteligente com sucesso.',
         received_at: newItem.receivedAt,
-        decoded: decodeResult.decoded
+        decoded: decodeResult.decoded,
+        persisted: savedInMongo
       },
       { status: 202 }
     );
@@ -88,10 +101,48 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
+    let mongoItems: any[] = [];
+    let fetchedFromMongo = false;
+
+    // Busca do MongoDB Cloud Atlas primeiro
+    try {
+      const { db } = await connectToDatabase();
+      mongoItems = await db
+        .collection('CentralPix')
+        .find({ status: { $ne: 'DELETED' } })
+        .sort({ receivedAt: -1 })
+        .limit(50)
+        .toArray();
+
+      fetchedFromMongo = true;
+    } catch (mongoErr: any) {
+      console.warn('[API /api/v1/pix GET] Fallback para memória:', mongoErr.message);
+    }
+
+    // Combina itens do MongoDB e do buffer em memória sem duplicados
+    const combinedMap = new Map();
+    
+    // Adiciona memória
+    (globalThis.pixQueueBuffer || []).forEach(item => combinedMap.set(item.id, item));
+
+    // Sobrescreve/complementa com MongoDB
+    if (fetchedFromMongo && mongoItems.length > 0) {
+      mongoItems.forEach(item => {
+        // Remove id do Mongo (_id) da serialização
+        const { _id, ...cleanItem } = item;
+        combinedMap.set(cleanItem.id, cleanItem);
+      });
+    }
+
+    const finalItems = Array.from(combinedMap.values()).sort(
+      (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+    );
+
     return NextResponse.json({
       success: true,
-      items: globalThis.pixQueueBuffer || [],
-      count: (globalThis.pixQueueBuffer || []).length,
+      items: finalItems,
+      count: finalItems.length,
+      source: fetchedFromMongo ? 'mongodb' : 'memory_fallback',
       timestamp: new Date().toISOString()
     });
   } catch (err: any) {
@@ -107,13 +158,26 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
+    // Remove do MongoDB
+    try {
+      const { db } = await connectToDatabase();
+      if (id) {
+        await db.collection('CentralPix').deleteOne({ id });
+      } else {
+        await db.collection('CentralPix').deleteMany({});
+      }
+    } catch (e) {
+      // Ignora erro do mongo no DELETE
+    }
+
+    // Remove da memória
     if (id) {
       globalThis.pixQueueBuffer = (globalThis.pixQueueBuffer || []).filter(item => item.id !== id);
     } else {
       globalThis.pixQueueBuffer = [];
     }
 
-    return NextResponse.json({ success: true, message: 'Fila atualizada.' });
+    return NextResponse.json({ success: true, message: 'Fila limpa.' });
   } catch (err: any) {
     return NextResponse.json(
       { error: 'Erro ao limpar fila de Pix.', details: err.message },
