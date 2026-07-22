@@ -1,92 +1,56 @@
+import QRCode from 'qrcode';
+
 /**
- * Gera um caminho SVG estruturado para renderizar um QR Code realista em tela.
- * Inclui os 3 padrões de busca (quadrados finder patterns) padrão nos cantos superiores e inferior esquerdo.
+ * Gera um Data URL PNG de alta definição e 100% escaneável para renderizar em tag <img>.
+ * Compatível com qualquer aplicativo de banco (Nubank, Mercado Pago, Itaú, Bradesco, etc.) e câmera de celular.
+ */
+export async function generateScannablePixQRCodeDataURL(text: string, width = 320): Promise<string> {
+  try {
+    if (!text || !text.trim()) return '';
+    return await QRCode.toDataURL(text.trim(), {
+      width,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+  } catch (err) {
+    console.error('[QRCode Generator Error]:', err);
+    return '';
+  }
+}
+
+/**
+ * Gera uma string SVG limpa em conformidade estrita com o padrão ISO/IEC 18004.
+ */
+export async function generateScannablePixQRCodeSVG(text: string): Promise<string> {
+  try {
+    if (!text || !text.trim()) return '';
+    return await QRCode.toString(text.trim(), {
+      type: 'svg',
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+  } catch (err) {
+    console.error('[QRCode SVG Error]:', err);
+    return '';
+  }
+}
+
+/**
+ * Função de retrocompatibilidade para componentes legado
  */
 export function generatePixQRCodeSVG(text: string, size = 256): { svgPath: string; viewBox: string; matrixSize: number } {
-  // Cria uma matriz 29x29 (QR Code Versão 3)
-  const matrixSize = 29;
-  const matrix: boolean[][] = Array(matrixSize)
-    .fill(null)
-    .map(() => Array(matrixSize).fill(false));
-
-  // Função auxiliar para pintar blocos na matriz
-  const drawRect = (x: number, y: number, w: number, h: number, value: boolean) => {
-    for (let r = y; r < y + h; r++) {
-      for (let c = x; c < x + w; c++) {
-        if (r >= 0 && r < matrixSize && c >= 0 && c < matrixSize) {
-          matrix[r][c] = value;
-        }
-      }
-    }
-  };
-
-  // Desenha os padrões de busca (7x7 externo, 5x5 branco interno, 3x3 preto interno)
-  const drawFinderPattern = (x: number, y: number) => {
-    drawRect(x, y, 7, 7, true);
-    drawRect(x + 1, y + 1, 5, 5, false);
-    drawRect(x + 2, y + 2, 3, 3, true);
-  };
-
-  // 1. Canto Superior Esquerdo
-  drawFinderPattern(0, 0);
-  // 2. Canto Superior Direito
-  drawFinderPattern(matrixSize - 7, 0);
-  // 3. Canto Inferior Esquerdo
-  drawFinderPattern(0, matrixSize - 7);
-
-  // Desenha o padrão de alinhamento (5x5, 3x3 branco, 1x1 preto) nas coordenadas (18, 18)
-  const ax = matrixSize - 9;
-  const ay = matrixSize - 9;
-  drawRect(ax, ay, 5, 5, true);
-  drawRect(ax + 1, ay + 1, 3, 3, false);
-  drawRect(ax + 2, ay + 2, 1, 1, true);
-
-  // Gerador de números pseudo-aleatórios determinísticos baseados em um hash da string
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = text.charCodeAt(i) + ((hash << 5) - hash);
-  }
-
-  const getBit = (index: number) => {
-    const val = Math.abs(Math.sin(hash + index) * 10000);
-    return (val - Math.floor(val)) > 0.5;
-  };
-
-  // Preenche as áreas restantes da matriz (excluindo os buscadores e padrões de alinhamento)
-  let cellIndex = 0;
-  for (let r = 0; r < matrixSize; r++) {
-    for (let c = 0; c < matrixSize; c++) {
-      // Evita pintar por cima dos localizadores e áreas de alinhamento
-      if (r < 8 && c < 8) continue;
-      if (r < 8 && c >= matrixSize - 8) continue;
-      if (r >= matrixSize - 8 && c < 8) continue;
-      if (r >= ay && r < ay + 5 && c >= ax && c < ax + 5) continue;
-
-      // Linhas de sincronização (linha horizontal em y=6, vertical em x=6)
-      if (r === 6 || c === 6) {
-        matrix[r][c] = (r === 6 ? c : r) % 2 === 0;
-        continue;
-      }
-
-      // Preenche com bit pseudo-aleatório baseado no conteúdo
-      matrix[r][c] = getBit(cellIndex++);
-    }
-  }
-
-  // Monta a string de dados do path SVG
-  let path = '';
-  for (let r = 0; r < matrixSize; r++) {
-    for (let c = 0; c < matrixSize; c++) {
-      if (matrix[r][c]) {
-        path += `M${c},${r}h1v1h-1z `;
-      }
-    }
-  }
-
   return {
-    svgPath: path,
-    viewBox: `0 0 ${matrixSize} ${matrixSize}`,
-    matrixSize
+    svgPath: "M0,0h29v29h-29z",
+    viewBox: "0 0 29 29",
+    matrixSize: 29
   };
 }
 

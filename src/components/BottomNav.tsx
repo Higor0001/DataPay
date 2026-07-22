@@ -13,7 +13,8 @@ import {
   Target,
   FileText,
   Settings,
-  X
+  X,
+  QrCode
 } from 'lucide-react';
 
 interface BottomNavProps {
@@ -33,6 +34,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab, n
   ];
 
   const moreTabs = [
+    { id: 'centralpix', label: 'Central Pix', icon: QrCode },
     { id: 'calendar', label: 'Calendário', icon: Calendar },
     { id: 'payments', label: 'Pagamentos', icon: DollarSign },
     { id: 'simulations', label: 'Simulador', icon: Calculator },

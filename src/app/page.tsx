@@ -14,6 +14,7 @@ import { SimulationsView } from '../components/SimulationsView';
 import { GoalsView } from '../components/GoalsView';
 import { ReportsView } from '../components/ReportsView';
 import { SettingsView } from '../components/SettingsView';
+import { CentralPixView } from '../components/CentralPixView';
 import { Bell, QrCode } from 'lucide-react';
 
 function InnerPage() {
@@ -27,6 +28,8 @@ function InnerPage() {
     switch (activeTab) {
       case 'dashboard':
         return <DashboardView />;
+      case 'centralpix':
+        return <CentralPixView />;
       case 'debts':
         return <DebtsView />;
       case 'reserve':
