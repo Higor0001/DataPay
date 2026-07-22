@@ -101,6 +101,60 @@ export const CentralPixView: React.FC = () => {
   // Recalcula predição da IA para item selecionado quando dívidas mudam
   const selectedReceipt = pixReceipts.find(r => r.id === selectedReceiptId);
 
+  // Sincroniza a Fila Inteligente via Polling automático da API /api/v1/pix (MacroDroid / REST)
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchServerQueue = async () => {
+      try {
+        const res = await fetch('/api/v1/pix');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (isMounted && data.success && Array.isArray(data.items)) {
+          setPixReceipts(prevReceipts => {
+            const existingIds = new Set(prevReceipts.map(r => r.id));
+            let newItemsAdded = 0;
+            const updated = [...prevReceipts];
+
+            for (const item of data.items) {
+              if (!existingIds.has(item.id)) {
+                const pred = predictDebtForPix(item.decoded, debts, payments);
+                updated.unshift({
+                  ...item,
+                  prediction: pred || undefined
+                });
+                newItemsAdded++;
+              }
+            }
+
+            if (newItemsAdded > 0) {
+              const latestNewItem = data.items[0];
+              setSelectedReceiptId(latestNewItem.id);
+              addNotification(
+                '⚡ Novo Pix Recebido!',
+                `Recebido Pix de ${latestNewItem.decoded.merchantName || 'Desconhecido'} via MacroDroid/API.`,
+                'success'
+              );
+            }
+
+            return updated;
+          });
+        }
+      } catch (err) {
+        // Erro silencioso durante polling de fundo
+      }
+    };
+
+    fetchServerQueue();
+    const intervalId = setInterval(fetchServerQueue, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [debts, payments, addNotification]);
+
   // Gera QR Code oficial de alta definição 100% escaneável por aplicativos de banco
   useEffect(() => {
     if (showQrModal && selectedReceipt?.rawPayload) {
