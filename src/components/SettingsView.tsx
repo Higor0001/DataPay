@@ -40,7 +40,7 @@ export const SettingsView: React.FC = () => {
     connectSyncEmail
   } = useAppState();
 
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'integrations' | 'supabase' | 'security' | 'pix'>('integrations');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'integrations' | 'mongodb' | 'security' | 'pix'>('integrations');
   const [emailInput, setEmailInput] = useState(syncEmail);
 
   useEffect(() => {
@@ -173,7 +173,7 @@ export const SettingsView: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight">Painel de Configurações</h2>
           <p className="text-slate-400 text-xs mt-1">
-            Gerencie conexões bancárias Open Finance, sincronizações do banco de dados Supabase e alertas do PWA.
+            Gerencie conexões bancárias Open Finance, sincronizações do banco de dados MongoDB e alertas do PWA.
           </p>
         </div>
       </div>
@@ -191,9 +191,9 @@ export const SettingsView: React.FC = () => {
           Extrato Bancário (OFX)
         </button>
         <button
-          onClick={() => setActiveSettingsTab('supabase')}
+          onClick={() => setActiveSettingsTab('mongodb')}
           className={`text-xs px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer ${
-            activeSettingsTab === 'supabase'
+            activeSettingsTab === 'mongodb'
               ? 'bg-indigo-600 text-white shadow-md'
               : 'text-slate-400 hover:text-slate-200'
           }`}
@@ -371,7 +371,7 @@ export const SettingsView: React.FC = () => {
           )}
 
           {/* Tab 2: MongoDB connection */}
-          {activeSettingsTab === 'supabase' && (
+          {activeSettingsTab === 'mongodb' && (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <div className="bg-indigo-600/20 p-2 rounded-xl text-indigo-400 border border-indigo-900/30">

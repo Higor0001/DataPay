@@ -92,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, notif
           <Database className="h-4 w-4 text-emerald-400" />
           <div className="text-left">
             <p className="text-[11px] font-medium text-slate-300">Banco de Dados</p>
-            <p className="text-[9px] text-emerald-400/90 font-semibold">Local e Supabase</p>
+            <p className="text-[9px] text-emerald-400/90 font-semibold">Local e MongoDB</p>
           </div>
         </div>
       </div>

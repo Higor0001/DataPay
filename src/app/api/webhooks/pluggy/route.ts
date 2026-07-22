@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 async function handleItemCreated(itemId: string) {
   console.log(`[Pluggy Webhook] Processando criação do Item ID: ${itemId}`);
   // TODO: Aqui você inicializa a chamada ao PluggyClient para carregar as contas e
-  // dívidas correspondentes a este itemId e salvá-las no Supabase.
+  // dívidas correspondentes a este itemId e salvá-las no MongoDB.
 }
 
 async function handleItemUpdated(itemId: string) {
@@ -52,6 +52,6 @@ async function handleItemUpdated(itemId: string) {
 
 async function handleItemError(itemId: string, error: any) {
   console.error(`[Pluggy Webhook] Erro reportado para o Item ID: ${itemId}`, error);
-  // TODO: Aqui você atualiza o status de sincronização deste banco para "Erro" no Supabase,
+  // TODO: Aqui você atualiza o status de sincronização deste banco para "Erro" no MongoDB,
   // notificando o usuário para reconectar via Widget.
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Debt, Payment, SmartReserve, Goal, BankIntegration, AppNotification, AIMessage } from '../types';
 
 interface StateContextType {
@@ -12,8 +11,6 @@ interface StateContextType {
   integrations: BankIntegration[];
   notifications: AppNotification[];
   messages: AIMessage[];
-  supabaseConfig: { url: string; anonKey: string } | null;
-  saveSupabaseConfig: (url: string, key: string) => void;
   addDebt: (debt: Omit<Debt, 'id' | 'status' | 'nextDueDate'>) => void;
   updateDebt: (debt: Debt) => void;
   deleteDebt: (id: string) => void;
@@ -80,7 +77,6 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [integrations, setIntegrations] = useState<BankIntegration[]>(initialIntegrations);
   const [notifications, setNotifications] = useState<AppNotification[]>(initialNotifications);
   const [messages, setMessages] = useState<AIMessage[]>(initialMessages);
-  const [supabaseConfig, setSupabaseConfig] = useState<{ url: string; anonKey: string } | null>(null);
   const [userId, setUserId] = useState<string>('');
   const [syncEmail, setSyncEmail] = useState<string>('');
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
@@ -734,13 +730,6 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     saveToLocal('agy_notifications', updated);
   };
 
-  const saveSupabaseConfig = (url: string, key: string) => {
-    const config = { url, anonKey: key };
-    setSupabaseConfig(config);
-    saveToLocal('agy_supabase_config', config);
-    addNotification('Configuração Supabase Salva', 'A arquitetura de sincronização do Supabase foi configurada.', 'info');
-  };
-
   // Deterministic UUID converter to ensure offline IDs comply with PostgreSQL UUID types
   const toUUID = (id: string): string => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -926,7 +915,6 @@ Você pode sugerir uma portabilidade de crédito para outros bancos (ex: Banco I
       localStorage.removeItem('agy_integrations');
       localStorage.removeItem('agy_notifications');
       localStorage.removeItem('agy_messages');
-      localStorage.removeItem('agy_supabase_config');
     }
     addNotification('Dados Reiniciados', 'A aplicação foi restaurada para o estado de simulação inicial.', 'info');
   };
@@ -962,8 +950,6 @@ Você pode sugerir uma portabilidade de crédito para outros bancos (ex: Banco I
         integrations,
         notifications,
         messages,
-        supabaseConfig,
-        saveSupabaseConfig,
         addDebt,
         updateDebt,
         deleteDebt,
