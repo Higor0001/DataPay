@@ -72,6 +72,9 @@ export const DashboardView: React.FC = () => {
   const monthlyAmountDue = activeDebts.reduce((sum, d) => sum + (d.installmentValue || 0), 0);
   const paidThisMonthAmount = payments.filter(p => p.status === 'Pago').reduce((sum, p) => sum + p.amount, 0);
   const remainingThisMonthAmount = Math.max(0, monthlyAmountDue - paidThisMonthAmount);
+
+  // Saldo Restante na Conta (Saldo em Conta - Comprometido do Mês)
+  const remainingBalanceAfterMonth = openFinanceBalance - monthlyAmountDue;
   
   const overdueDebts = activeDebts.filter((d) => d.status === 'overdue');
   const totalOverdueAmount = overdueDebts.reduce((sum, d) => sum + d.currentBalance, 0);
@@ -230,6 +233,75 @@ export const DashboardView: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Painel de Fluxo e Balanço Financeiro do Mês (Saldo na Conta - Comprometido = Saldo Restante) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-slate-800/90 rounded-3xl p-6 shadow-2xl relative overflow-hidden space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-5 w-5 text-emerald-400" />
+            <h3 className="text-sm font-black uppercase tracking-wider text-white">
+              Balanço e Fluxo de Caixa ({currentRefMonthName})
+            </h3>
+          </div>
+          <span className="text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800/60 px-2.5 py-1 rounded-full font-bold">
+            Open Finance Consolidado ⚡
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+          {/* 1. Saldo em Conta */}
+          <div className="bg-slate-950/80 p-4 rounded-2xl border border-emerald-500/30 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">
+              <span>🏦 Saldo na Conta</span>
+              <span className="text-[10px] text-emerald-400 font-mono">Bancário</span>
+            </div>
+            <span className="text-2xl font-black text-emerald-400 tracking-tight">
+              R$ {openFinanceBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-slate-500 mt-1.5 block">Total disponível em contas conectadas</span>
+          </div>
+
+          {/* 2. Valor Comprometido no Mês */}
+          <div className="bg-slate-950/80 p-4 rounded-2xl border border-amber-500/30 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">
+              <span>🗓️ Comprometido no Mês</span>
+              <span className="text-[10px] text-amber-400 font-mono">{activeDebts.length} parcelas</span>
+            </div>
+            <span className="text-2xl font-black text-amber-300 tracking-tight">
+              R$ {monthlyAmountDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-amber-400/80 mt-1.5 block">Programado para sair da conta neste mês</span>
+          </div>
+
+          {/* 3. Saldo Restante na Conta (Saldo em Conta - Comprometido) */}
+          <div className={`bg-slate-950/80 p-4 rounded-2xl border ${remainingBalanceAfterMonth >= 0 ? 'border-sky-500/40' : 'border-red-500/40'} flex flex-col justify-between`}>
+            <div className="flex items-center justify-between text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">
+              <span>💵 Saldo Restante na Conta</span>
+              <span className={`text-[10px] ${remainingBalanceAfterMonth >= 0 ? 'text-sky-400 font-mono' : 'text-red-400 font-mono'}`}>
+                {remainingBalanceAfterMonth >= 0 ? 'Livre' : 'Déficit'}
+              </span>
+            </div>
+            <span className={`text-2xl font-black tracking-tight ${remainingBalanceAfterMonth >= 0 ? 'text-sky-300' : 'text-red-400'}`}>
+              R$ {remainingBalanceAfterMonth.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-slate-400 mt-1.5 block">
+              {remainingBalanceAfterMonth >= 0 ? 'Sombra de saldo livre pós-pagamentos' : 'Atenção: Saldo insuficiente para o mês'}
+            </span>
+          </div>
+
+          {/* 4. Dívida Total Acumulada */}
+          <div className="bg-slate-950/80 p-4 rounded-2xl border border-red-500/30 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">
+              <span>📉 Dívida Total</span>
+              <span className="text-[10px] text-red-400 font-mono">Geral</span>
+            </div>
+            <span className="text-2xl font-black text-white tracking-tight">
+              R$ {totalDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-red-400/80 mt-1.5 block">Saldo devedor total acumulado nos credores</span>
+          </div>
+        </div>
+      </div>
 
       {/* Top Cards Grid (6 KPI Cards Consolidados) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
