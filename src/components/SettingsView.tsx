@@ -27,6 +27,8 @@ import {
   Info
 } from 'lucide-react';
 
+import { getStoredPierreApiKey, setStoredPierreApiKey } from '../services/pierreService';
+
 export const SettingsView: React.FC = () => {
   const {
     debts,
@@ -73,6 +75,19 @@ export const SettingsView: React.FC = () => {
     localStorage.setItem('datapay_pix_name', pixName);
     localStorage.setItem('datapay_pix_city', pixCity);
     addNotification('Configuração Pix Salva', 'Sua chave Pix e dados do titular foram salvos com sucesso!', 'success');
+  };
+
+  const [pierreApiKey, setPierreApiKey] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredPierreApiKey();
+    }
+    return '';
+  });
+
+  const handleSavePierreKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    setStoredPierreApiKey(pierreApiKey);
+    addNotification('Chave Pierre API Salva', 'Sua API Key do Pierre Finance foi atualizada com sucesso!', 'success');
   };
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -228,9 +243,54 @@ export const SettingsView: React.FC = () => {
         {/* Active tab contents (2 columns wide) */}
         <div className="lg:col-span-2 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-md">
           
-          {/* Tab 1: OFX Statement Import */}
+          {/* Tab 1: Pierre Open Finance & OFX Statement Import */}
           {activeSettingsTab === 'integrations' && (
-            <div className="space-y-6">
+            <div className="space-y-8">
+              
+              {/* Pierre Open Finance API Card */}
+              <div className="bg-slate-950 border border-indigo-500/30 p-5 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-indigo-600/20 p-2 rounded-xl text-indigo-400 border border-indigo-500/30">
+                      <Key className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-sm">Pierre Open Finance API</h3>
+                      <p className="text-[10px] text-slate-400">Integração em tempo real para saldo, extrato e faturas via Pierre Finance.</p>
+                    </div>
+                  </div>
+                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                    Ativo
+                  </span>
+                </div>
+
+                <form onSubmit={handleSavePierreKey} className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1">
+                      API Key do Pierre Finance (sk-...)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={pierreApiKey}
+                        onChange={(e) => setPierreApiKey(e.target.value)}
+                        placeholder="sk-your-api-key-here"
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-md cursor-pointer shrink-0"
+                      >
+                        Salvar Chave
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[10.5px] text-slate-400">
+                    Obtenha sua chave gratuita em <a href="https://pierre.finance/api-key" target="_blank" rel="noreferrer" className="text-indigo-400 underline">pierre.finance/api-key</a>.
+                  </p>
+                </form>
+              </div>
+
               <div className="flex items-center gap-3">
                 <div className="bg-indigo-600/20 p-2 rounded-xl text-indigo-400 border border-indigo-900/30">
                   <UploadCloud className="h-5 w-5" />

@@ -3,6 +3,7 @@
 import React from 'react';
 import {
   LayoutDashboard,
+  Building2,
   PiggyBank,
   CreditCard,
   Calendar,
@@ -25,6 +26,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, notificationsCount }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'openfinance', label: 'Pierre Open Finance', icon: Building2 },
     { id: 'centralpix', label: 'Central Pix (IA)', icon: QrCode },
     { id: 'debts', label: 'Dívidas', icon: CreditCard },
     { id: 'reserve', label: 'Reserva Inteligente', icon: PiggyBank },

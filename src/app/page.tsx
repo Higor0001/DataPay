@@ -5,6 +5,7 @@ import { StateProvider, useAppState } from '../context/StateContext';
 import { Sidebar } from '../components/Sidebar';
 import { BottomNav } from '../components/BottomNav';
 import { DashboardView } from '../components/DashboardView';
+import { PierreFinanceView } from '../components/PierreFinanceView';
 import { DebtsView } from '../components/DebtsView';
 import { ReserveView } from '../components/ReserveView';
 import { CalendarView } from '../components/CalendarView';
@@ -28,6 +29,8 @@ function InnerPage() {
     switch (activeTab) {
       case 'dashboard':
         return <DashboardView />;
+      case 'openfinance':
+        return <PierreFinanceView />;
       case 'centralpix':
         return <CentralPixView />;
       case 'debts':

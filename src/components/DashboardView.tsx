@@ -35,12 +35,21 @@ import {
   Line
 } from 'recharts';
 
+import { PierreFinanceService } from '../services/pierreService';
+import { PierreBalanceData } from '../types/pierre';
+
 export const DashboardView: React.FC = () => {
   const { debts, payments, reserve, payInstallment } = useAppState();
   const [isMounted, setIsMounted] = useState(false);
+  const [pierreBalance, setPierreBalance] = useState<PierreBalanceData | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
+    PierreFinanceService.getBalance()
+      .then(res => {
+        if (res.data) setPierreBalance(res.data);
+      })
+      .catch(err => console.error('[Pierre Dashboard Load Error]:', err));
   }, []);
 
   // Calculations
@@ -278,6 +287,39 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* Pierre Open Finance Live Balance Card Banner */}
+      <div className="bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-950 border border-indigo-500/30 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+        <div className="flex items-center gap-4">
+          <div className="bg-indigo-600/20 text-indigo-400 p-3 rounded-2xl border border-indigo-500/30">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-white text-base">Pierre Open Finance</h3>
+              <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                Live API
+              </span>
+            </div>
+            <p className="text-slate-300 text-xs mt-1">
+              Saldo Consolidado: <strong className="text-white font-extrabold text-sm">{pierreBalance ? pierreBalance.totalBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'}</strong> ({pierreBalance?.accounts?.length || 0} contas conectadas)
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            const el = document.getElementById('openfinance');
+            if (el) el.click();
+            // Alternatively trigger tab change via navigation
+            window.dispatchEvent(new CustomEvent('changeTab', { detail: 'openfinance' }));
+          }}
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-5 py-3 rounded-2xl transition-all shadow-lg shadow-indigo-600/20 cursor-pointer shrink-0"
+        >
+          <span>Ver Extrato e Contas</span>
+          <ArrowUpRight className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Charts Section */}
