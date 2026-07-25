@@ -880,11 +880,16 @@ export const CentralPixView: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-6 bg-slate-950 space-y-6">
             {selectedReceipt ? (
               <>
-                {/* Header do Card Selecionado com QR Code em Destaque */}
+                {/* Header do Card Selecionado com QR Code ou Status de Quitação */}
                 <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-5 shadow-lg">
                   <div className="flex items-center gap-4 flex-1">
-                    {/* QR Code Transformado diretamente a partir do Payload */}
-                    {selectedReceiptQrUrl ? (
+                    {/* Exibe QR Code se pendente ou Selo de Quitado se marcado como PAGO */}
+                    {selectedReceipt.status === 'PAID' || selectedReceipt.status === 'PAID_PARTIAL' ? (
+                      <div className="w-24 h-24 bg-emerald-950/80 border-2 border-emerald-500 rounded-2xl flex flex-col items-center justify-center p-2 text-center shrink-0 shadow-lg shadow-emerald-500/20">
+                        <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-1" />
+                        <span className="text-[10px] font-black text-emerald-300 uppercase tracking-widest">QUITADO</span>
+                      </div>
+                    ) : selectedReceiptQrUrl ? (
                       <div className="bg-white p-2 rounded-2xl border-2 border-emerald-500 shadow-lg shadow-emerald-500/20 shrink-0">
                         <img
                           src={selectedReceiptQrUrl}
@@ -901,11 +906,17 @@ export const CentralPixView: React.FC = () => {
                     <div className="space-y-1 overflow-hidden flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-                          Payload EMV Decodificado em QR Code
+                          Payload EMV / Código Pix & Boleto
                         </span>
-                        <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-1.5 py-0.2 rounded font-bold">
-                          Escaneável ⚡
-                        </span>
+                        {selectedReceipt.status === 'PAID' ? (
+                          <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-extrabold flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Baixa Efetuada
+                          </span>
+                        ) : (
+                          <span className="text-[9px] bg-sky-950 text-sky-400 border border-sky-800/60 px-2 py-0.5 rounded font-bold">
+                            Aguardando Pagamento
+                          </span>
+                        )}
                       </div>
                       <h2 className="text-lg font-extrabold text-white">
                         {selectedReceipt.decoded.merchantName}
@@ -913,21 +924,42 @@ export const CentralPixView: React.FC = () => {
                       <p className="text-xs text-emerald-400 font-black">
                         {selectedReceipt.decoded.amount ? `R$ ${selectedReceipt.decoded.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Valor a definir'}
                       </p>
-                      <p className="text-[10px] text-slate-400 font-mono break-all line-clamp-2 bg-slate-950 p-2 rounded-xl border border-slate-800/80">
-                        {selectedReceipt.rawPayload}
-                      </p>
+
+                      {/* Código / Payload em texto integral sem truncamento */}
+                      <div className="mt-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                          <span>Código Copia e Cola / Payload Completo:</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(selectedReceipt.rawPayload);
+                              setCopiedPixText(true);
+                              setTimeout(() => setCopiedPixText(false), 2000);
+                              addNotification('Copiado!', 'Código Copia e Cola copiado para a área de transferência.', 'info');
+                            }}
+                            className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Copy className="h-3 w-3" />
+                            {copiedPixText ? 'Copiado ✓' : 'Copiar Código'}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-200 font-mono break-all select-all leading-relaxed">
+                          {selectedReceipt.rawPayload}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
-                    <button
-                      onClick={() => setShowQrModal(true)}
-                      className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer shadow-md"
-                    >
-                      <QrCode className="h-4 w-4 text-emerald-400" />
-                      Ampliar QR Code [Enter]
-                    </button>
-                  </div>
+                  {selectedReceipt.status !== 'PAID' && (
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        onClick={() => setShowQrModal(true)}
+                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer shadow-md"
+                      >
+                        <QrCode className="h-4 w-4 text-emerald-400" />
+                        Ampliar QR Code [Enter]
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Seletor do Credor e Parcela (Seleção Direta pelo Usuário) */}
@@ -1011,53 +1043,7 @@ export const CentralPixView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Tabela de Tags EMV Extraídas */}
-                <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 space-y-3">
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
-                    Especificação de Tags EMV® Extraídas (Abstract Syntax Tree)
-                  </h3>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                    <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                      <span className="text-[10px] text-slate-500 block">ID 59: Merchant Name</span>
-                      <strong className="text-white">{selectedReceipt.decoded.merchantName}</strong>
-                    </div>
-                    <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                      <span className="text-[10px] text-slate-500 block">ID 54: Transaction Amount</span>
-                      <strong className="text-emerald-400">
-                        {selectedReceipt.decoded.amount
-                          ? `R$ ${selectedReceipt.decoded.amount.toFixed(2)}`
-                          : 'Dinâmico'}
-                      </strong>
-                    </div>
-                    <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                      <span className="text-[10px] text-slate-500 block">ID 62 (05): TXID / Ref</span>
-                      <strong className="text-slate-300 font-mono">
-                        {selectedReceipt.decoded.additionalData?.txid || 'N/A'}
-                      </strong>
-                    </div>
-                    <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                      <span className="text-[10px] text-slate-500 block">ID 26 (01): Chave Pix</span>
-                      <strong className="text-slate-300 font-mono truncate block">
-                        {selectedReceipt.decoded.merchantInfo.key || 'N/A'}
-                      </strong>
-                    </div>
-                    <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                      <span className="text-[10px] text-slate-500 block">ID 63: Validação CRC16</span>
-                      <strong
-                        className={`font-mono text-xs ${
-                          selectedReceipt.decoded.crcValid ? 'text-emerald-400' : 'text-amber-400'
-                        }`}
-                      >
-                        {selectedReceipt.decoded.crc16} ({selectedReceipt.decoded.crcValid ? 'VÁLIDO ✓' : 'OK'})
-                      </strong>
-                    </div>
-                    <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                      <span className="text-[10px] text-slate-500 block">ID 60: Cidade</span>
-                      <strong className="text-slate-300">{selectedReceipt.decoded.merchantCity}</strong>
-                    </div>
-                  </div>
-                </div>
 
                 {/* Ações do State Machine (Botoes de Ação) */}
                 <div className="pt-2 flex flex-wrap items-center gap-3">
