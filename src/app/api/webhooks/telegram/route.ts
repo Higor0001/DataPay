@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { decodeEMVPix } from '../../../../utils/emvPixParser';
 import { parseBoletoLine } from '../../../../utils/boletoParser';
 import { connectToDatabase } from '../../../../utils/mongodb';
-import { getPixCopyPasteCode } from '../../../../utils/qrCode';
+import { getPixCopyPasteCode, ensureAuthenticPixEMV } from '../../../../utils/qrCode';
 
 // Memory map for user Telegram pending debt & parcel selections (chatId -> Selection)
 declare global {
@@ -502,9 +502,7 @@ Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financ
       const match = pixCodeToParse.match(/000201[0-9a-zA-Z]+/);
       const cleanCode = match
         ? match[0]
-        : (isEMVCode
-            ? pixCodeToParse
-            : getPixCopyPasteCode(pendingSelection?.amount || 100, pendingSelection?.debtName || 'DataPay'));
+        : ensureAuthenticPixEMV(pixCodeToParse, pendingSelection?.amount || 100, pendingSelection?.debtName || 'DataPay');
 
       const decodeResult = decodeEMVPix(cleanCode);
       const targetAmount = pendingSelection ? pendingSelection.amount : (decodeResult.decoded?.amount || 100);

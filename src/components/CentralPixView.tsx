@@ -7,7 +7,7 @@ import { PixReceiptItem, CompetenceChecklistItem } from '../types/centralPix';
 import { decodeEMVPix } from '../utils/emvPixParser';
 import { parseBoletoLine } from '../utils/boletoParser';
 import { predictDebtForPix, buildCompetenceChecklist } from '../utils/pixAIMotor';
-import { generateScannablePixQRCodeDataURL, getPixCopyPasteCode } from '../utils/qrCode';
+import { generateScannablePixQRCodeDataURL, getPixCopyPasteCode, ensureAuthenticPixEMV } from '../utils/qrCode';
 import { downloadMacroDroidFile } from '../utils/macrodroidGenerator';
 import {
   QrCode,
@@ -148,8 +148,8 @@ export const CentralPixView: React.FC = () => {
         setPayPixResult(resData.transaction);
         addNotification('Cobrança Pix Gerada', 'QR Code e código Copia e Cola gerados via Mercado Pago!', 'success');
       } else {
-        // Fallback local caso API não responda
-        const emvCode = payPixInput.startsWith('000201') ? payPixInput : getPixCopyPasteCode(valNum, payPixRecipient || 'Recebedor Pix');
+        // Gera o EMV Real para a Chave Pix ou código colado pelo usuário
+        const emvCode = ensureAuthenticPixEMV(payPixInput, valNum, payPixRecipient || 'Recebedor Pix');
         const qrUrl = await generateScannablePixQRCodeDataURL(emvCode, 320);
         setPayPixResult({
           id: `pix_pay_${Date.now()}`,
@@ -163,8 +163,8 @@ export const CentralPixView: React.FC = () => {
       }
     } catch (err: any) {
       console.error('[Pay Pix Error]:', err);
-      // Fallback estático
-      const emvCode = payPixInput.startsWith('000201') ? payPixInput : getPixCopyPasteCode(valNum, payPixRecipient || 'Recebedor Pix');
+      // Fallback estático com EMV autêntico da chave informada pelo usuário
+      const emvCode = ensureAuthenticPixEMV(payPixInput, valNum, payPixRecipient || 'Recebedor Pix');
       const qrUrl = await generateScannablePixQRCodeDataURL(emvCode, 320);
       setPayPixResult({
         id: `pix_pay_${Date.now()}`,

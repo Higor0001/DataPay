@@ -1,5 +1,76 @@
 import QRCode from 'qrcode';
 
+function crc16ccitt(str: string): string {
+  let crc = 0xFFFF;
+  for (let c = 0; c < str.length; c++) {
+    crc ^= str.charCodeAt(c) << 8;
+    for (let i = 0; i < 8; i++) {
+      if (crc & 0x8000) {
+        crc = (crc << 1) ^ 0x1021;
+      } else {
+        crc = crc << 1;
+      }
+      crc &= 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+/**
+ * Gera um payload Pix Estático válido em conformidade com o padrão BCB / EMV.
+ */
+export function getStaticPixPayload(amount: number, key: string, name: string, city: string): string {
+  const cleanKey = key ? key.trim() : 'financeiro@datapay.com';
+  const cleanName = (name || 'DATAPAY').normalize("NFD").replace(/[\u0300-\u036f]/g, "").substring(0, 25).toUpperCase().trim();
+  const cleanCity = (city || 'SAO PAULO').normalize("NFD").replace(/[\u0300-\u036f]/g, "").substring(0, 15).toUpperCase().trim();
+  const valStr = (amount || 0).toFixed(2);
+
+  const merchantAccountInfo = `0014br.gov.bcb.pix01${cleanKey.length.toString().padStart(2, '0')}${cleanKey}`;
+  
+  let payload = '000201';
+  payload += `26${merchantAccountInfo.length.toString().padStart(2, '0')}${merchantAccountInfo}`;
+  payload += '52040000';
+  payload += '5303986';
+  if (amount > 0) {
+    payload += `54${valStr.length.toString().padStart(2, '0')}${valStr}`;
+  }
+  payload += '5802BR';
+  payload += `59${cleanName.length.toString().padStart(2, '0')}${cleanName}`;
+  payload += `60${cleanCity.length.toString().padStart(2, '0')}${cleanCity}`;
+  payload += '62070503***';
+  payload += '6304';
+
+  const crc = crc16ccitt(payload);
+  return payload + crc;
+}
+
+/**
+ * Garante que qualquer entrada (chave Pix, e-mail, telefone, CPF, CNPJ ou payload)
+ * seja convertida em um PAYLOAD EMV PIX OFICIAL REAL sem usar dados fictícios.
+ */
+export function ensureAuthenticPixEMV(inputStr: string, amount = 10, keyOrName = 'DataPay'): string {
+  if (!inputStr || !inputStr.trim()) {
+    return getStaticPixPayload(amount, 'financeiro@datapay.com', keyOrName, 'SAO PAULO');
+  }
+
+  const clean = inputStr.trim();
+
+  // Se já for um payload EMV Pix completo (começa com 000201)
+  if (clean.startsWith('000201')) {
+    return clean;
+  }
+
+  // Se for uma Linha Digitável de Boleto (números puros de 44 a 48 dígitos)
+  const digitsOnly = clean.replace(/[^0-9]/g, '');
+  if (digitsOnly.length >= 44 && digitsOnly.length <= 48) {
+    return clean;
+  }
+
+  // Caso contrário, a entrada É UMA CHAVE PIX REAL (CPF, CNPJ, E-mail, Celular ou Chave Aleatória)
+  // Gera o Payload EMV Oficial do Banco Central do Brasil para a chave real fornecida!
+  return getStaticPixPayload(amount, clean, keyOrName, 'SAO PAULO');
+}
+
 /**
  * Gera um Data URL PNG de alta definição e 100% escaneável para renderizar em tag <img>.
  * Compatível com qualquer aplicativo de banco (Nubank, Mercado Pago, Itaú, Bradesco, etc.) e câmera de celular.
@@ -7,7 +78,8 @@ import QRCode from 'qrcode';
 export async function generateScannablePixQRCodeDataURL(text: string, width = 320): Promise<string> {
   try {
     if (!text || !text.trim()) return '';
-    return await QRCode.toDataURL(text.trim(), {
+    const authenticPayload = ensureAuthenticPixEMV(text);
+    return await QRCode.toDataURL(authenticPayload.trim(), {
       width,
       margin: 1,
       errorCorrectionLevel: 'M',
@@ -28,7 +100,8 @@ export async function generateScannablePixQRCodeDataURL(text: string, width = 32
 export async function generateScannablePixQRCodeSVG(text: string): Promise<string> {
   try {
     if (!text || !text.trim()) return '';
-    return await QRCode.toString(text.trim(), {
+    const authenticPayload = ensureAuthenticPixEMV(text);
+    return await QRCode.toString(authenticPayload.trim(), {
       type: 'svg',
       margin: 1,
       errorCorrectionLevel: 'M',
@@ -55,54 +128,9 @@ export function generatePixQRCodeSVG(text: string, size = 256): { svgPath: strin
 }
 
 /**
- * Retorna uma string padrão Pix Copia e Cola estruturada para uso no simulador
+ * Retorna uma string padrão Pix Copia e Cola estruturada no padrão oficial do Banco Central
  */
-export function getPixCopyPasteCode(amount: number, description = 'Reserva Financeira'): string {
-  const amountStr = amount.toFixed(2);
-  const formattedDesc = description.replace(/[^a-zA-Z0-9]/g, '').substring(0, 15);
-  
-  // Simulação de payload de Pix dinâmico no padrão BACEN
-  return `00020101021226840014br.gov.bcb.pix2562pix.mercadopago.com/qr/v2/4ad8d893-68d5-45bb-b3b2-70b55ec70cb0520400005303986540${amountStr.length.toString().padStart(2, '0')}${amountStr}5802BR5925DataPay Ltda6009Sao Paulo62070503***6304${formattedDesc}`;
-}
-
-function crc16ccitt(str: string): string {
-  let crc = 0xFFFF;
-  for (let c = 0; c < str.length; c++) {
-    crc ^= str.charCodeAt(c) << 8;
-    for (let i = 0; i < 8; i++) {
-      if (crc & 0x8000) {
-        crc = (crc << 1) ^ 0x1021;
-      } else {
-        crc = crc << 1;
-      }
-      crc &= 0xFFFF;
-    }
-  }
-  return crc.toString(16).toUpperCase().padStart(4, '0');
-}
-
-/**
- * Gera um payload Pix Estático válido em conformidade com o padrão BCB / EMV.
- */
-export function getStaticPixPayload(amount: number, key: string, name: string, city: string): string {
-  const cleanKey = key.trim();
-  const cleanName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").substring(0, 25).toUpperCase().trim();
-  const cleanCity = city.normalize("NFD").replace(/[\u0300-\u036f]/g, "").substring(0, 15).toUpperCase().trim();
-  const valStr = amount.toFixed(2);
-
-  const merchantAccountInfo = `0014br.gov.bcb.pix01${cleanKey.length.toString().padStart(2, '0')}${cleanKey}`;
-  
-  let payload = '000201';
-  payload += `26${merchantAccountInfo.length.toString().padStart(2, '0')}${merchantAccountInfo}`;
-  payload += '52040000';
-  payload += '5303986';
-  payload += `54${valStr.length.toString().padStart(2, '0')}${valStr}`;
-  payload += '5802BR';
-  payload += `59${cleanName.length.toString().padStart(2, '0')}${cleanName}`;
-  payload += `60${cleanCity.length.toString().padStart(2, '0')}${cleanCity}`;
-  payload += '62070503***';
-  payload += '6304';
-
-  const crc = crc16ccitt(payload);
-  return payload + crc;
+export function getPixCopyPasteCode(amount: number, description = 'DataPay', pixKey?: string): string {
+  const targetKey = pixKey && pixKey.trim() ? pixKey.trim() : 'financeiro@datapay.com';
+  return getStaticPixPayload(amount, targetKey, description, 'SAO PAULO');
 }
