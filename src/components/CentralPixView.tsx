@@ -51,7 +51,7 @@ const initialMockPixCodes = [
 ];
 
 export const CentralPixView: React.FC = () => {
-  const { debts, payments, payInstallment, addNotification } = useAppState();
+  const { debts, payments, payInstallment, updateDebt, deletePayment, addNotification } = useAppState();
 
   const [pixReceipts, setPixReceipts] = useState<PixReceiptItem[]>([]);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
@@ -541,9 +541,27 @@ export const CentralPixView: React.FC = () => {
     addNotification('Pix Ignorado', 'O item foi movido para a lixeira de descarte.', 'info');
   };
 
-  // Handler para apagar/excluir Pix permanentemente
+  // Handler para apagar/excluir Pix permanentemente e restaurar o saldo da dívida se foi pago
   const handleDeleteReceipt = (receiptId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+
+    const targetReceipt = pixReceipts.find(r => r.id === receiptId);
+
+    if (targetReceipt && (targetReceipt.status === 'PAID' || targetReceipt.status === 'PAID_PARTIAL')) {
+      const effId = getEffectiveDebtId(targetReceipt);
+      const targetDebt = debts.find(d => d.id === effId);
+      if (targetDebt) {
+        const valToRestore = targetReceipt.amountPaid || targetReceipt.decoded.amount || targetDebt.installmentValue;
+        const restoredBalance = targetDebt.currentBalance + valToRestore;
+        const restoredRemaining = targetDebt.remainingInstallments + 1;
+        updateDebt({
+          ...targetDebt,
+          currentBalance: restoredBalance,
+          remainingInstallments: restoredRemaining,
+          status: 'active'
+        });
+      }
+    }
 
     setPixReceipts(prev => {
       const next = prev.filter(r => r.id !== receiptId);
@@ -555,7 +573,7 @@ export const CentralPixView: React.FC = () => {
 
     fetch(`/api/v1/pix?id=${encodeURIComponent(receiptId)}`, { method: 'DELETE' }).catch(() => {});
 
-    addNotification('Pix Excluído', 'O registro do Pix foi removido permanentemente.', 'info');
+    addNotification('Pix/Boleto Excluído', 'O registro foi removido e o saldo/parcela da dívida foram restaurados.', 'info');
   };
 
   // Filtra itens da Fila

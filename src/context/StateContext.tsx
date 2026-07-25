@@ -698,13 +698,35 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const payment = payments.find(p => p.id === id);
     if (!payment) return;
 
+    // Se o pagamento estava confirmado como "Pago", restaura o saldo e a parcela da dívida correspondente
+    if (payment.status === 'Pago' && payment.debtId) {
+      const updatedDebts = debts.map(d => {
+        if (d.id === payment.debtId) {
+          const restoredBalance = d.currentBalance + payment.amount;
+          const restoredRemaining = d.remainingInstallments + 1;
+          const restoredStatus: Debt['status'] = d.status === 'paid' ? 'active' : d.status;
+
+          return {
+            ...d,
+            currentBalance: restoredBalance,
+            remainingInstallments: restoredRemaining,
+            status: restoredStatus
+          };
+        }
+        return d;
+      });
+
+      setDebts(updatedDebts);
+      saveToLocal('agy_debts', updatedDebts);
+    }
+
     const updated = payments.filter(p => p.id !== id);
     setPayments(updated);
     saveToLocal('agy_payments', updated);
 
     addNotification(
       'Pagamento Excluído',
-      `O registro de pagamento da dívida "${payment.debtName}" foi removido.`,
+      `O registro de pagamento da dívida "${payment.debtName}" foi removido e o saldo/parcelas foram restaurados.`,
       'info'
     );
   };
