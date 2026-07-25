@@ -12,62 +12,15 @@ if (!globalThis.telegramPendingDebtSelections) {
   globalThis.telegramPendingDebtSelections = new Map();
 }
 
-// Helper to fetch user debts from 'Finanças' collection with automatic fallback
+// Helper to fetch REAL user debts from 'Finanças' collection (sorted by last update)
 async function getStoredDebts(db: any) {
-  let doc = await db.collection('Finanças').findOne({ userId: 'default_user' });
-  if (!doc) {
-    doc = await db.collection('Finanças').findOne({});
-  }
+  const docs = await db.collection('Finanças').find({}).sort({ updatedAt: -1 }).toArray();
+  
+  // Encontra o documento mais recente com dívidas reais cadastradas
+  const targetDoc = docs.find((d: any) => Array.isArray(d.debts) && d.debts.length > 0) || docs[0] || null;
+  const debtsList: any[] = targetDoc?.debts || [];
 
-  let debtsList: any[] = doc?.debts || [];
-
-  // Se não houver dívidas salvas no banco, inicializa dívidas padrão para teste imediato
-  if (!debtsList || debtsList.length === 0) {
-    debtsList = [
-      {
-        id: 'debt_itau_1',
-        name: 'Empréstimo Itaú Unibanco',
-        bank: 'Itaú',
-        installmentValue: 450.00,
-        currentBalance: 4500.00,
-        remainingInstallments: 10,
-        totalInstallments: 12,
-        status: 'active'
-      },
-      {
-        id: 'debt_nubank_2',
-        name: 'Fatura Cartão Nubank',
-        bank: 'Nubank',
-        installmentValue: 320.50,
-        currentBalance: 320.50,
-        remainingInstallments: 1,
-        totalInstallments: 1,
-        status: 'active'
-      },
-      {
-        id: 'debt_bradesco_3',
-        name: 'Financiamento Bradesco',
-        bank: 'Bradesco',
-        installmentValue: 890.00,
-        currentBalance: 8900.00,
-        remainingInstallments: 10,
-        totalInstallments: 12,
-        status: 'active'
-      }
-    ];
-
-    try {
-      await db.collection('Finanças').updateOne(
-        { userId: 'default_user' },
-        { $set: { userId: 'default_user', debts: debtsList, updatedAt: new Date().toISOString() } },
-        { upsert: true }
-      );
-    } catch (e: any) {
-      console.warn('[Telegram DB Init Error]:', e.message);
-    }
-  }
-
-  return { doc, debtsList };
+  return { doc: targetDoc, debtsList };
 }
 
 // Helper to send message back to Telegram Chat with optional Inline Keyboards
@@ -214,9 +167,10 @@ Envie ou cole agora a *Chave Pix* ou o código *Pix Copia e Cola (\`000201...\`)
             };
             paymentsList.unshift(newPayment);
 
+            const userId = doc?.userId || 'default_user';
             await db.collection('Finanças').updateOne(
-              { userId: 'default_user' },
-              { $set: { userId: 'default_user', debts: updatedDebts, payments: paymentsList, updatedAt: new Date().toISOString() } },
+              { userId },
+              { $set: { userId, debts: updatedDebts, payments: paymentsList, updatedAt: new Date().toISOString() } },
               { upsert: true }
             );
 
@@ -272,7 +226,7 @@ Envie ou cole agora a *Chave Pix* ou o código *Pix Copia e Cola (\`000201...\`)
 Selecione uma dívida para vincular uma Chave Pix ou use os comandos abaixo:
 
 📌 *Comandos Disponíveis:*
-• \`/dividas\` — Lista dívidas ativas para selecionar e atrelar Chaves Pix.
+• \`/dividas\` — Lista suas dívidas cadastradas para selecionar e atrelar Chaves Pix.
 • \`/pix <chave_ou_copia_cola>\` — Cadastra e analisa Pix via IA.
 • \`/pagar <valor> <recebedor>\` — Gera um Pix instantâneo para pagamento.
 • \`/saldos\` — Consulta saldos das suas contas no Pierre Open Finance.
@@ -282,7 +236,7 @@ Selecione uma dívida para vincular uma Chave Pix ou use os comandos abaixo:
       return NextResponse.json({ ok: true });
     }
 
-    // 2. Comando /dividas ou /pagar_divida (Com Botões Interativos para Selecionar)
+    // 2. Comando /dividas ou /pagar_divida (Exibe as dívidas reais do site)
     if (text.startsWith('/dividas') || text.startsWith('/divida')) {
       try {
         const { db } = await connectToDatabase();
@@ -290,7 +244,13 @@ Selecione uma dívida para vincular uma Chave Pix ou use os comandos abaixo:
         const activeDebts = debtsList.filter((d: any) => d.status !== 'paid');
 
         if (activeDebts.length === 0) {
-          if (botToken) await sendTelegramMessage(botToken, chatId, `🎉 *Parabéns!* Você não possui nenhuma dívida ativa pendente no momento.`);
+          if (botToken) {
+            await sendTelegramMessage(
+              botToken,
+              chatId,
+              `📋 *Nenhuma Dívida Ativa Encontrada*\n\nVocê não possui dívidas cadastradas no DataPay no momento.\n\n👉 Acesse [data-pay-omega.vercel.app](https://data-pay-omega.vercel.app) para cadastrar suas dívidas no site!`
+            );
+          }
           return NextResponse.json({ ok: true });
         }
 
