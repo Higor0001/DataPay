@@ -671,11 +671,11 @@ export const CentralPixView: React.FC = () => {
                 />
               </div>
 
-              {/* Botões de Filtro de Confiança IA */}
+              {/* Botões de Filtro de Status */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
                 <button
                   onClick={() => setFilterConfidence('ALL')}
-                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap ${
+                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap cursor-pointer ${
                     filterConfidence === 'ALL'
                       ? 'bg-slate-800 text-white border border-slate-700'
                       : 'text-slate-400 hover:text-slate-200'
@@ -685,25 +685,25 @@ export const CentralPixView: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setFilterConfidence('HIGH')}
-                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap flex items-center gap-1 cursor-pointer ${
                     filterConfidence === 'HIGH'
                       ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-700/50'
-                      : 'text-emerald-500/80 hover:text-emerald-400'
+                      : 'text-slate-400 hover:text-emerald-400'
                   }`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  Alta Confiança ({highConfidenceCount})
+                  Pendentes ({pixReceipts.filter(r => r.status === 'PENDING').length})
                 </button>
                 <button
                   onClick={() => setFilterConfidence('MEDIUM')}
-                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap flex items-center gap-1 cursor-pointer ${
                     filterConfidence === 'MEDIUM'
                       ? 'bg-amber-950/80 text-amber-400 border border-amber-700/50'
-                      : 'text-amber-500/80 hover:text-amber-400'
+                      : 'text-slate-400 hover:text-amber-400'
                   }`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                  Sugestão Forte
+                  Quitados ({pixReceipts.filter(r => r.status === 'PAID').length})
                 </button>
               </div>
 
@@ -875,173 +875,86 @@ export const CentralPixView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Seletor de Correção Humana (Permite alterar qual dívida será vinculada ao Pix) */}
-                <div className="p-4 bg-slate-900/90 rounded-2xl border border-emerald-500/30 space-y-2.5 shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-extrabold text-white flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-emerald-400" />
-                      Correção Humana (Vincular à Dívida Desejada)
-                    </label>
-                    {manualDebtOverrides[selectedReceipt.id] ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
-                        <Edit3 className="h-3 w-3" /> Alterado Manualmente pelo Usuário
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        IA Sugestão Automática
-                      </span>
-                    )}
+                {/* Seletor do Credor e Parcela (Seleção Direta pelo Usuário) */}
+                <div className="p-5 bg-slate-900 border border-emerald-500/30 rounded-3xl space-y-4 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2 text-white font-bold text-sm">
+                      <UserCheck className="h-5 w-5 text-emerald-400" />
+                      <span>Vincular ao Credor & Parcela</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Seleção Direta
+                    </span>
                   </div>
 
-                  <select
-                    value={getEffectiveDebtId(selectedReceipt)}
-                    onChange={(e) => {
-                      const newDebtId = e.target.value;
-                      setManualDebtOverrides(prev => ({ ...prev, [selectedReceipt.id]: newDebtId }));
-                      const matched = debts.find(d => d.id === newDebtId);
-                      addNotification('Correção Humana Aplicada', `Pix vinculado à dívida "${matched?.name || 'Selecionada'}".`, 'info');
-                    }}
-                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-emerald-500 cursor-pointer shadow-inner"
-                  >
-                    {debts.length === 0 ? (
-                      <option value="">Nenhuma dívida cadastrada no sistema</option>
-                    ) : (
-                      debts.map(d => {
-                        const isPredicted = selectedReceipt.prediction?.debtId === d.id;
-                        return (
-                          <option key={d.id} value={d.id}>
-                            {d.name} — Parcela R$ {d.installmentValue.toFixed(2)} ({d.bank}) {isPredicted ? ' 🎯 [Sugestão IA]' : ''}
-                          </option>
-                        );
-                      })
-                    )}
-                  </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Seletor do Credor / Dívida */}
+                    <div>
+                      <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
+                        Credor / Dívida
+                      </label>
+                      <select
+                        value={getEffectiveDebtId(selectedReceipt)}
+                        onChange={(e) => {
+                          const newDebtId = e.target.value;
+                          setManualDebtOverrides(prev => ({ ...prev, [selectedReceipt.id]: newDebtId }));
+                          const matched = debts.find(d => d.id === newDebtId);
+                          addNotification('Credor Selecionado', `Pix/Boleto vinculado à dívida "${matched?.name || 'Selecionada'}".`, 'info');
+                        }}
+                        className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      >
+                        {debts.length === 0 ? (
+                          <option value="">Nenhuma dívida cadastrada no sistema</option>
+                        ) : (
+                          debts.map(d => (
+                            <option key={d.id} value={d.id}>
+                              {d.name} ({d.bank}) — R$ {d.installmentValue?.toFixed(2)}/mês
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+
+                    {/* Seletor da Parcela / Referência */}
+                    <div>
+                      <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
+                        Parcela / Referência
+                      </label>
+                      <select
+                        value={selectedReceipt.parcelRef || 'atual'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPixReceipts(prev => prev.map(r => r.id === selectedReceipt.id ? { ...r, parcelRef: val } : r));
+                        }}
+                        className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      >
+                        {(() => {
+                          const effId = getEffectiveDebtId(selectedReceipt);
+                          const d = debts.find(debt => debt.id === effId);
+                          const total = d?.totalInstallments || 12;
+                          const rem = d?.remainingInstallments || 1;
+                          const currentNum = Math.max(1, total - rem + 1);
+
+                          return (
+                            <>
+                              <option value={`Parcela ${currentNum}/${total}`}>
+                                🗓️ Parcela {currentNum}/{total} (Atual) — R$ {d?.installmentValue?.toFixed(2) || '0.00'}
+                              </option>
+                              {currentNum + 1 <= total && (
+                                <option value={`Parcela ${currentNum + 1}/${total}`}>
+                                  🗓️ Parcela {currentNum + 1}/{total} (Próxima) — R$ {d?.installmentValue?.toFixed(2) || '0.00'}
+                                </option>
+                              )}
+                              <option value="Quitação Total">
+                                💰 Quitar Saldo Total — R$ {d?.currentBalance?.toFixed(2) || '0.00'}
+                              </option>
+                            </>
+                          );
+                        })()}
+                      </select>
+                    </div>
+                  </div>
                 </div>
-
-                {/* Box de Predição e Diagnóstico da IA */}
-                {selectedReceipt.prediction && (
-                  <div
-                    className={`p-5 rounded-2xl border ${
-                      selectedReceipt.prediction.confidenceLevel === 'HIGH'
-                        ? 'bg-emerald-950/30 border-emerald-500/40'
-                        : selectedReceipt.prediction.confidenceLevel === 'MEDIUM'
-                        ? 'bg-amber-950/30 border-amber-500/40'
-                        : 'bg-slate-900 border-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5 text-emerald-400 animate-pulse" />
-                        <h3 className="text-sm font-extrabold text-white">
-                          Resultado da Inteligência Artificial
-                        </h3>
-                      </div>
-                      <span className="text-xs font-black px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        Score: {Math.round(selectedReceipt.prediction.confidenceScore * 100)}% de Certeza
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-300 mb-4">
-                      {selectedReceipt.prediction.reasoning}
-                    </p>
-
-                    {/* Breakdown do Vetor de Features (F1 a F5) */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 pt-3 border-t border-slate-800/80 text-[10px]">
-                      <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
-                        <span className="text-slate-500 block">F1 (Nome)</span>
-                        <strong className="text-white text-xs font-mono">
-                          {Math.round(selectedReceipt.prediction.featureVector.f1_nameSim * 100)}%
-                        </strong>
-                      </div>
-                      <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
-                        <span className="text-slate-500 block">F2 (Valor)</span>
-                        <strong className="text-white text-xs font-mono">
-                          {Math.round(selectedReceipt.prediction.featureVector.f2_amountSim * 100)}%
-                        </strong>
-                      </div>
-                      <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
-                        <span className="text-slate-500 block">F3 (Tempo)</span>
-                        <strong className="text-white text-xs font-mono">
-                          {Math.round(selectedReceipt.prediction.featureVector.f3_temporalSim * 100)}%
-                        </strong>
-                      </div>
-                      <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
-                        <span className="text-slate-500 block">F4 (TXID)</span>
-                        <strong className="text-white text-xs font-mono">
-                          {selectedReceipt.prediction.featureVector.f4_txidMatch === 1 ? 'Match 1.0' : '0.0'}
-                        </strong>
-                      </div>
-                      <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/80">
-                        <span className="text-slate-500 block">F5 (Chave Histórica)</span>
-                        <strong className="text-white text-xs font-mono">
-                          {selectedReceipt.prediction.featureVector.f5_keyMatch === 1 ? 'Match 1.0' : '0.0'}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Timeline Competence Checklist (Linha do Tempo de Reconhecimento) */}
-                {selectedReceipt.prediction && (
-                  <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
-                        Checklist de Competência da Dívida ({selectedReceipt.prediction.debtName})
-                      </h3>
-                      <span className="text-[10px] text-slate-400">
-                        Imutabilidade de Histórico Ativa
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      {buildCompetenceChecklist(
-                        debts.find(d => d.id === selectedReceipt.prediction?.debtId) || debts[0],
-                        payments,
-                        selectedReceipt.prediction.installmentNumber
-                      ).map(item => (
-                        <div
-                          key={item.installmentNumber}
-                          className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-all ${
-                            item.status === 'PAID'
-                              ? 'bg-slate-950/40 border-slate-800/60 text-slate-400 opacity-60'
-                              : item.status === 'SUGGESTED'
-                              ? 'bg-emerald-950/40 border-emerald-500/60 text-white font-bold shadow-md shadow-emerald-500/10'
-                              : 'bg-slate-950 border-slate-800 text-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            {item.status === 'PAID' ? (
-                              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                            ) : item.status === 'SUGGESTED' ? (
-                              <Sparkles className="h-4 w-4 text-emerald-400" />
-                            ) : (
-                              <Clock className="h-4 w-4 text-slate-500" />
-                            )}
-                            <div>
-                              <span>Competência {item.monthYear}</span>
-                              <span className="text-[10px] text-slate-400 ml-2">
-                                (Parcela {item.installmentNumber})
-                              </span>
-                            </div>
-                          </div>
-
-                          <div>
-                            {item.status === 'SUGGESTED' && (
-                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                                Sugestão Principal IA
-                              </span>
-                            )}
-                            {item.status === 'PAID' && (
-                              <span className="text-[10px] text-emerald-400">
-                                Pago em {item.paidDate}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* Tabela de Tags EMV Extraídas */}
                 <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 space-y-3">
