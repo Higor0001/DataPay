@@ -212,6 +212,7 @@ export const CentralPixView: React.FC = () => {
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [isQrLoading, setIsQrLoading] = useState<boolean>(false);
+  const [selectedReceiptQrUrl, setSelectedReceiptQrUrl] = useState<string>('');
 
   // Estado para armazenar correções humanas manuais do vínculo da dívida (receiptId -> debtId)
   const [manualDebtOverrides, setManualDebtOverrides] = useState<Record<string, string>>({});
@@ -271,6 +272,17 @@ export const CentralPixView: React.FC = () => {
 
   // Recalcula predição da IA para item selecionado quando dívidas mudam
   const selectedReceipt = pixReceipts.find(r => r.id === selectedReceiptId);
+
+  // Gera o QR Code DataURL instantaneamente a partir do código/payload do Pix selecionado
+  useEffect(() => {
+    if (selectedReceipt?.rawPayload) {
+      generateScannablePixQRCodeDataURL(selectedReceipt.rawPayload, 200).then(url => {
+        setSelectedReceiptQrUrl(url);
+      });
+    } else {
+      setSelectedReceiptQrUrl('');
+    }
+  }, [selectedReceipt]);
 
   // Sincroniza a Fila Inteligente via Polling automático da API /api/v1/pix (MacroDroid / REST)
   useEffect(() => {
@@ -868,27 +880,52 @@ export const CentralPixView: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-6 bg-slate-950 space-y-6">
             {selectedReceipt ? (
               <>
-                {/* Header do Card Selecionado */}
-                <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800/80 flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-                      Payload EMV Analisado
-                    </span>
-                    <h2 className="text-lg font-extrabold text-white mt-0.5">
-                      {selectedReceipt.decoded.merchantName}
-                    </h2>
-                    <p className="text-xs text-slate-400 font-mono mt-1 truncate max-w-lg">
-                      {selectedReceipt.rawPayload.substring(0, 70)}...
-                    </p>
+                {/* Header do Card Selecionado com QR Code em Destaque */}
+                <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-5 shadow-lg">
+                  <div className="flex items-center gap-4 flex-1">
+                    {/* QR Code Transformado diretamente a partir do Payload */}
+                    {selectedReceiptQrUrl ? (
+                      <div className="bg-white p-2 rounded-2xl border-2 border-emerald-500 shadow-lg shadow-emerald-500/20 shrink-0">
+                        <img
+                          src={selectedReceiptQrUrl}
+                          alt="QR Code Pix"
+                          className="w-24 h-24 object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-24 h-24 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-center text-slate-500 shrink-0">
+                        <QrCode className="h-8 w-8 animate-pulse text-emerald-400" />
+                      </div>
+                    )}
+
+                    <div className="space-y-1 overflow-hidden flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                          Payload EMV Decodificado em QR Code
+                        </span>
+                        <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-1.5 py-0.2 rounded font-bold">
+                          Escaneável ⚡
+                        </span>
+                      </div>
+                      <h2 className="text-lg font-extrabold text-white">
+                        {selectedReceipt.decoded.merchantName}
+                      </h2>
+                      <p className="text-xs text-emerald-400 font-black">
+                        {selectedReceipt.decoded.amount ? `R$ ${selectedReceipt.decoded.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Valor a definir'}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-mono break-all line-clamp-2 bg-slate-950 p-2 rounded-xl border border-slate-800/80">
+                        {selectedReceipt.rawPayload}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     <button
                       onClick={() => setShowQrModal(true)}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer shadow-md"
+                      className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer shadow-md"
                     >
                       <QrCode className="h-4 w-4 text-emerald-400" />
-                      QR Code Gigante [Enter]
+                      Ampliar QR Code [Enter]
                     </button>
                   </div>
                 </div>
