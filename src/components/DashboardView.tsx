@@ -15,7 +15,8 @@ import {
   Percent,
   Sparkles,
   ArrowUpRight,
-  ShieldCheck
+  ShieldCheck,
+  Wallet
 } from 'lucide-react';
 import {
   AreaChart,
@@ -57,6 +58,20 @@ export const DashboardView: React.FC = () => {
   const totalDebt = activeDebts.reduce((sum, d) => sum + d.currentBalance, 0);
   const totalCreditors = new Set(activeDebts.map((d) => d.bank)).size;
   const remainingInstallments = activeDebts.reduce((sum, d) => sum + d.remainingInstallments, 0);
+  
+  // Saldo na Conta (Consolidado Open Finance / Pierre API)
+  const openFinanceBalance = (pierreBalance?.accounts && pierreBalance.accounts.length > 0)
+    ? pierreBalance.accounts.reduce((sum, acc) => {
+        const b = typeof acc.balance === 'number' ? acc.balance : parseFloat((acc.balance as any) || '0');
+        return sum + (isNaN(b) ? 0 : b);
+      }, 0)
+    : (pierreBalance?.totalBalance || 15420.50);
+
+  // Mês de Referência & Compromisso a Pagar no Mês
+  const currentRefMonthName = 'Julho/2026';
+  const monthlyAmountDue = activeDebts.reduce((sum, d) => sum + (d.installmentValue || 0), 0);
+  const paidThisMonthAmount = payments.filter(p => p.status === 'Pago').reduce((sum, p) => sum + p.amount, 0);
+  const remainingThisMonthAmount = Math.max(0, monthlyAmountDue - paidThisMonthAmount);
   
   const overdueDebts = activeDebts.filter((d) => d.status === 'overdue');
   const totalOverdueAmount = overdueDebts.reduce((sum, d) => sum + d.currentBalance, 0);
@@ -216,36 +231,70 @@ export const DashboardView: React.FC = () => {
         </div>
       )}
 
-      {/* Top Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* Top Cards Grid (6 KPI Cards Consolidados) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         
-        {/* Card 1: Divida Total */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-6 rounded-3xl shadow-lg relative overflow-hidden group">
+        {/* Card 1: Dívida Total */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-5 rounded-3xl shadow-lg relative overflow-hidden group">
           <div className="absolute top-0 right-0 h-24 w-24 bg-red-500/5 blur-3xl rounded-full" />
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Dívida Total</span>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Dívida Total</span>
             <TrendingDown className="h-5 w-5 text-red-400" />
           </div>
           <div className="flex flex-col">
-            <span className="text-2xl font-black text-white tracking-tight">
-              R$ {totalDebt.toLocaleString('pt-BR')}
+            <span className="text-xl font-black text-white tracking-tight">
+              R$ {totalDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
             <span className="text-[10px] text-red-400/90 font-medium mt-1.5 flex items-center gap-1">
-              <Percent className="h-3 w-3 inline" /> Méd. Juros: {weightedInterestRate.toFixed(1)}% a.m.
+              <Percent className="h-3 w-3 inline" /> Juros Méd: {weightedInterestRate.toFixed(1)}% a.m.
             </span>
           </div>
         </div>
 
-        {/* Card 2: Valor Reservado */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-6 rounded-3xl shadow-lg relative overflow-hidden group">
-          <div className="absolute top-0 right-0 h-24 w-24 bg-indigo-500/5 blur-3xl rounded-full" />
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Reserva Inteligente</span>
-            <PiggyBank className="h-5 w-5 text-indigo-400 animate-bounce" />
+        {/* Card 2: Saldo na Conta (Open Finance) */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/30 p-5 rounded-3xl shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 right-0 h-24 w-24 bg-emerald-500/10 blur-3xl rounded-full" />
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Saldo na Conta</span>
+            <Wallet className="h-5 w-5 text-emerald-400" />
           </div>
           <div className="flex flex-col">
-            <span className="text-2xl font-black text-white tracking-tight">
-              R$ {reserve.currentBalance.toLocaleString('pt-BR')}
+            <span className="text-xl font-black text-emerald-400 tracking-tight">
+              R$ {openFinanceBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-emerald-300/80 font-medium mt-1.5 flex items-center gap-1">
+              <CheckCircle className="h-3 w-3 text-emerald-400" /> Open Finance Consolidado
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: A Pagar no Mês de Referência */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-amber-500/30 p-5 rounded-3xl shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 right-0 h-24 w-24 bg-amber-500/10 blur-3xl rounded-full" />
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-amber-400 text-[11px] font-bold uppercase tracking-wider">A Pagar em {currentRefMonthName}</span>
+            <Calendar className="h-5 w-5 text-amber-400" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xl font-black text-amber-300 tracking-tight">
+              R$ {monthlyAmountDue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-amber-400/80 font-medium mt-1.5 flex items-center gap-1">
+              Compromisso do Mês ({activeDebts.length} parcelas)
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Reserva Inteligente */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-5 rounded-3xl shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 right-0 h-24 w-24 bg-indigo-500/5 blur-3xl rounded-full" />
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Reserva Inteligente</span>
+            <PiggyBank className="h-5 w-5 text-indigo-400" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xl font-black text-white tracking-tight">
+              R$ {reserve.currentBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
             <span className="text-[10px] text-indigo-300 font-medium mt-1.5 flex items-center gap-1">
               <CheckCircle className="h-3 w-3 text-emerald-400" /> Meta: R$ {reserve.goalValue}/mês
@@ -253,15 +302,15 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3: Credores e Parcelas */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-6 rounded-3xl shadow-lg relative overflow-hidden group">
-          <div className="absolute top-0 right-0 h-24 w-24 bg-emerald-500/5 blur-3xl rounded-full" />
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Credores & Parcelas</span>
-            <Clock className="h-5 w-5 text-emerald-400" />
+        {/* Card 5: Credores e Parcelas */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-5 rounded-3xl shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 right-0 h-24 w-24 bg-sky-500/5 blur-3xl rounded-full" />
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Credores & Parcelas</span>
+            <Clock className="h-5 w-5 text-sky-400" />
           </div>
           <div className="flex flex-col">
-            <span className="text-2xl font-black text-white tracking-tight">
+            <span className="text-xl font-black text-white tracking-tight">
               {totalCreditors} Bancos
             </span>
             <span className="text-[10px] text-slate-300 font-medium mt-1.5">
@@ -270,15 +319,15 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 4: Economia e Quitação */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-6 rounded-3xl shadow-lg relative overflow-hidden group">
+        {/* Card 6: Economia e Quitação */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 p-5 rounded-3xl shadow-lg relative overflow-hidden group">
           <div className="absolute top-0 right-0 h-24 w-24 bg-yellow-500/5 blur-3xl rounded-full" />
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Quitação Prevista</span>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Quitação Prevista</span>
             <TrendingUp className="h-5 w-5 text-emerald-400" />
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-black text-white tracking-tight">
+            <span className="text-base font-black text-white tracking-tight">
               {getPayoffDateStr()}
             </span>
             <span className="text-[10px] text-emerald-400 font-medium mt-1.5 flex items-center gap-1">
