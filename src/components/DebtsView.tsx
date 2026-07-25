@@ -488,25 +488,27 @@ export const DebtsView: React.FC = () => {
                           </button>
                           
                           {!isPaid && (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setAmortizeResult(null);
-                                  setShowAmortizeModal(debt);
-                                }}
-                                className="bg-indigo-650 hover:bg-indigo-700 text-white text-[11px] font-bold px-3 py-2 rounded-xl border border-indigo-600 transition-all cursor-pointer"
-                              >
-                                Amortizar
-                              </button>
-                              <button
-                                onClick={() => deleteDebt(debt.id)}
-                                className="bg-slate-900 border border-red-950 hover:bg-red-950/20 text-red-400 p-2 rounded-xl transition-all cursor-pointer hover:border-red-550"
-                                title="Excluir Dívida"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </>
+                            <button
+                              onClick={() => {
+                                setAmortizeResult(null);
+                                setShowAmortizeModal(debt);
+                              }}
+                              className="bg-indigo-650 hover:bg-indigo-700 text-white text-[11px] font-bold px-3 py-2 rounded-xl border border-indigo-600 transition-all cursor-pointer"
+                            >
+                              Amortizar
+                            </button>
                           )}
+
+                          <button
+                            onClick={() => {
+                              deleteDebt(debt.id);
+                              addNotification('Dívida Excluída', `A dívida "${debt.name}" foi removida do sistema.`, 'info');
+                            }}
+                            className="bg-slate-900 border border-red-950 hover:bg-red-950/20 text-red-400 p-2 rounded-xl transition-all cursor-pointer hover:border-red-550"
+                            title="Excluir Dívida (Mesmo Liquidada)"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -879,23 +881,38 @@ export const DebtsView: React.FC = () => {
 
             </div>
 
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 flex items-center justify-between gap-2">
               <button
                 onClick={() => {
-                  setShowEditModal(selectedDebt);
+                  deleteDebt(selectedDebt.id);
+                  addNotification('Dívida Excluída', `A dívida "${selectedDebt.name}" foi removida do sistema.`, 'info');
                   setSelectedDebt(null);
                 }}
-                className="bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-semibold py-3 px-5 rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                className="bg-red-950/40 hover:bg-red-900/80 text-red-400 hover:text-white border border-red-900/50 text-xs font-semibold py-3 px-4 rounded-2xl transition-all cursor-pointer flex items-center gap-1.5"
+                title="Excluir Dívida (Mesmo Liquidada)"
               >
-                <Pencil className="h-4 w-4" />
-                <span>Editar</span>
+                <Trash2 className="h-4 w-4" />
+                <span>Excluir Dívida</span>
               </button>
-              <button
-                onClick={() => setSelectedDebt(null)}
-                className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold py-3 rounded-2xl transition-all"
-              >
-                Fechar
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowEditModal(selectedDebt);
+                    setSelectedDebt(null);
+                  }}
+                  className="bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-semibold py-3 px-5 rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Editar</span>
+                </button>
+                <button
+                  onClick={() => setSelectedDebt(null)}
+                  className="bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold py-3 px-4 rounded-2xl transition-all"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
         </div>
