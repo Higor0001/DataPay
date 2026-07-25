@@ -35,7 +35,8 @@ import {
   DollarSign,
   Send,
   Check,
-  FileCheck
+  FileCheck,
+  Trash2
 } from 'lucide-react';
 
 // Mocks iniciais para pré-carregar a fila do Central Pix com dados realistas
@@ -516,6 +517,23 @@ export const CentralPixView: React.FC = () => {
     addNotification('Pix Ignorado', 'O item foi movido para a lixeira de descarte.', 'info');
   };
 
+  // Handler para apagar/excluir Pix permanentemente
+  const handleDeleteReceipt = (receiptId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    setPixReceipts(prev => {
+      const next = prev.filter(r => r.id !== receiptId);
+      if (selectedReceiptId === receiptId) {
+        setSelectedReceiptId(next[0]?.id || null);
+      }
+      return next;
+    });
+
+    fetch(`/api/v1/pix?id=${encodeURIComponent(receiptId)}`, { method: 'DELETE' }).catch(() => {});
+
+    addNotification('Pix Excluído', 'O registro do Pix foi removido permanentemente.', 'info');
+  };
+
   // Filtra itens da Fila
   const filteredReceipts = pixReceipts.filter(r => {
     if (filterConfidence === 'HIGH') return r.prediction?.confidenceLevel === 'HIGH' && r.status === 'PENDING';
@@ -741,12 +759,21 @@ export const CentralPixView: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="text-right">
-                            <span className="text-xs font-black text-emerald-400">
-                              {receipt.decoded.amount
-                                ? `R$ ${receipt.decoded.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                                : 'Pix Dinâmico'}
-                            </span>
+                          <div className="text-right flex flex-col items-end">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-black text-emerald-400">
+                                {receipt.decoded.amount
+                                  ? `R$ ${receipt.decoded.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                  : 'Pix Dinâmico'}
+                              </span>
+                              <button
+                                onClick={(e) => handleDeleteReceipt(receipt.id, e)}
+                                className="text-slate-500 hover:text-red-400 p-1 rounded-md hover:bg-slate-800 transition-colors cursor-pointer"
+                                title="Apagar / Excluir Pix"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                             <div className="mt-0.5">
                               {pred && (
                                 <span
@@ -1073,6 +1100,15 @@ export const CentralPixView: React.FC = () => {
                     className="py-3 px-4 bg-slate-900 hover:bg-red-950/60 hover:text-red-400 text-slate-400 font-bold text-xs rounded-xl border border-slate-800 flex items-center gap-2 cursor-pointer transition-all"
                   >
                     IGNORAR [D]
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteReceipt(selectedReceipt.id)}
+                    className="py-3 px-4 bg-red-950/40 hover:bg-red-900/80 text-red-400 hover:text-white font-extrabold text-xs rounded-xl border border-red-900/50 flex items-center gap-2 cursor-pointer transition-all"
+                    title="Excluir Pix permanentemente"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    EXCLUIR
                   </button>
                 </div>
               </>
