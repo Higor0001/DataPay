@@ -199,6 +199,9 @@ export const CentralPixView: React.FC = () => {
     if (manualDebtOverrides[receipt.id]) {
       return manualDebtOverrides[receipt.id];
     }
+    if (receipt.linkedDebtId) {
+      return receipt.linkedDebtId;
+    }
     if (receipt.prediction?.debtId) {
       return receipt.prediction.debtId;
     }
@@ -774,7 +777,12 @@ export const CentralPixView: React.FC = () => {
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
-                            <div className="mt-0.5">
+                            <div className="mt-0.5 flex items-center gap-1">
+                              {receipt.source === 'TELEGRAM_BOT' && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-sky-950 text-sky-400 border border-sky-800/60">
+                                  📱 Telegram
+                                </span>
+                              )}
                               {pred && (
                                 <span
                                   className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
@@ -792,7 +800,7 @@ export const CentralPixView: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Indicação da Associação da Dívida (IA ou Correção Humana) */}
+                        {/* Indicação da Associação da Dívida (IA, Telegram ou Correção Humana) */}
                         {(() => {
                           const effId = getEffectiveDebtId(receipt);
                           const linkedDebt = debts.find(d => d.id === effId);
@@ -804,7 +812,7 @@ export const CentralPixView: React.FC = () => {
                                 Dívida: <strong className={isManual ? "text-purple-300 font-bold" : "text-slate-200"}>{linkedDebt.name}</strong>
                               </span>
                               <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${isManual ? "bg-purple-950 text-purple-300 border border-purple-800/60" : "text-slate-500"}`}>
-                                {isManual ? '👤 Manual' : `P. ${pred?.installmentNumber || 1}/${pred?.totalInstallments || 12}`}
+                                {isManual ? '👤 Manual' : receipt.parcelRef ? `🗓️ ${receipt.parcelRef}` : `P. ${pred?.installmentNumber || 1}/${pred?.totalInstallments || 12}`}
                               </span>
                             </div>
                           );

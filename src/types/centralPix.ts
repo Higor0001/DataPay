@@ -59,6 +59,8 @@ export interface PixReceiptItem {
   prediction?: AIPrediction;
   linkedInstallmentId?: string;
   linkedDebtId?: string;
+  parcelRef?: string;
+  source?: string;
   amountPaid?: number;
   paidAt?: string;
   daysLate?: number;
