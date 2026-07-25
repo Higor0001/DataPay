@@ -31,7 +31,11 @@ import {
   Plus,
   Download,
   UserCheck,
-  Edit3
+  Edit3,
+  DollarSign,
+  Send,
+  Check,
+  FileCheck
 } from 'lucide-react';
 
 // Mocks iniciais para pré-carregar a fila do Central Pix com dados realistas
@@ -49,9 +53,136 @@ export const CentralPixView: React.FC = () => {
 
   const [pixReceipts, setPixReceipts] = useState<PixReceiptItem[]>([]);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'inbox' | 'macrodroid' | 'analytics'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'paypix' | 'macrodroid' | 'analytics'>('inbox');
   const [filterConfidence, setFilterConfidence] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Estados do Módulo "Pagar Pix"
+  const [payPixInput, setPayPixInput] = useState('');
+  const [payPixRecipient, setPayPixRecipient] = useState('');
+  const [payPixAmount, setPayPixAmount] = useState('');
+  const [payPixDescription, setPayPixDescription] = useState('');
+  const [payPixSelectedDebtId, setPayPixSelectedDebtId] = useState('');
+  const [payPixIsLoading, setPayPixIsLoading] = useState(false);
+  const [payPixResult, setPayPixResult] = useState<any>(null);
+  const [payPixReceipt, setPayPixReceipt] = useState<any>(null);
+  const [copiedPixText, setCopiedPixText] = useState(false);
+
+  // Auto decodifica se o usuário colar um código Pix Copia e Cola EMV
+  const handlePayPixInputChange = (val: string) => {
+    setPayPixInput(val);
+    if (val.startsWith('000201')) {
+      const decodedRes = decodeEMVPix(val);
+      if (decodedRes.valid && decodedRes.decoded) {
+        if (decodedRes.decoded.merchantName) setPayPixRecipient(decodedRes.decoded.merchantName);
+        if (decodedRes.decoded.amount) setPayPixAmount(decodedRes.decoded.amount.toString());
+        
+        // Tenta associar com dívidas via IA
+        const pred = predictDebtForPix(decodedRes.decoded, debts, payments);
+        if (pred?.debtId) setPayPixSelectedDebtId(pred.debtId);
+
+        addNotification(
+          'Pix Copia e Cola Decodificado',
+          `Recebedor: ${decodedRes.decoded.merchantName} | Valor: R$ ${decodedRes.decoded.amount?.toFixed(2) || 'A definir'}`,
+          'info'
+        );
+      }
+    }
+  };
+
+  // Gerar Cobrança / QR Code Pix via Mercado Pago API ou Simulador
+  const handleGeneratePixPayment = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    const valNum = parseFloat(payPixAmount);
+    if (!valNum || valNum <= 0) {
+      addNotification('Valor Inválido', 'Por favor, informe um valor válido para o pagamento Pix.', 'alert');
+      return;
+    }
+
+    if (!payPixRecipient && !payPixInput) {
+      addNotification('Recebedor Ausente', 'Informe o recebedor ou a chave Pix.', 'alert');
+      return;
+    }
+
+    setPayPixIsLoading(true);
+    setPayPixResult(null);
+
+    try {
+      // Tenta chamar API do Mercado Pago / Provider
+      const targetDebt = debts.find(d => d.id === payPixSelectedDebtId);
+      const res = await fetch('/api/payments/mercado-pago/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: valNum,
+          debts: targetDebt ? [targetDebt] : [{ id: 'custom', name: payPixRecipient || 'Pagamento Pix', installmentValue: valNum }],
+          email: 'higor@datapay.com'
+        })
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success && resData.transaction) {
+        setPayPixResult(resData.transaction);
+        addNotification('Cobrança Pix Gerada', 'QR Code e código Copia e Cola gerados via Mercado Pago!', 'success');
+      } else {
+        // Fallback local caso API não responda
+        const emvCode = payPixInput.startsWith('000201') ? payPixInput : getPixCopyPasteCode(valNum, payPixRecipient || 'Recebedor Pix');
+        const qrUrl = await generateScannablePixQRCodeDataURL(emvCode, 320);
+        setPayPixResult({
+          id: `pix_pay_${Date.now()}`,
+          amount: valNum,
+          qrCodeBase64: qrUrl.replace(/^data:image\/png;base64,/, ''),
+          qrCodeCopyPaste: emvCode,
+          recipient: payPixRecipient || 'Beneficiário Pix',
+          status: 'Pendente'
+        });
+        addNotification('Pix Gerado com Sucesso', 'Código Copia e Cola e QR Code prontos para pagamento!', 'success');
+      }
+    } catch (err: any) {
+      console.error('[Pay Pix Error]:', err);
+      // Fallback estático
+      const emvCode = payPixInput.startsWith('000201') ? payPixInput : getPixCopyPasteCode(valNum, payPixRecipient || 'Recebedor Pix');
+      const qrUrl = await generateScannablePixQRCodeDataURL(emvCode, 320);
+      setPayPixResult({
+        id: `pix_pay_${Date.now()}`,
+        amount: valNum,
+        qrCodeBase64: qrUrl.replace(/^data:image\/png;base64,/, ''),
+        qrCodeCopyPaste: emvCode,
+        recipient: payPixRecipient || 'Beneficiário Pix',
+        status: 'Pendente'
+      });
+      addNotification('Pix Criado (Modo Offline)', 'Código Pix e QR Code gerados com sucesso.', 'info');
+    } finally {
+      setPayPixIsLoading(false);
+    }
+  };
+
+  // Confirmar Execução / Quitação do Pix
+  const handleExecuteConfirmPayPix = () => {
+    const valNum = parseFloat(payPixAmount) || payPixResult?.amount || 0;
+    if (valNum <= 0) return;
+
+    const targetDebt = debts.find(d => d.id === payPixSelectedDebtId);
+
+    if (targetDebt) {
+      payInstallment(targetDebt.id, valNum, 'Pix');
+    }
+
+    const receiptObj = {
+      id: payPixResult?.id || `rec_${Date.now()}`,
+      recipient: payPixRecipient || 'Beneficiário Pix',
+      amount: valNum,
+      debtName: targetDebt ? targetDebt.name : 'Pagamento Avulso',
+      bankName: targetDebt ? targetDebt.bank : 'Pix Direct',
+      date: new Date().toISOString(),
+      transactionId: `E${Date.now()}${Math.random().toString().substring(2, 8)}`,
+      status: 'CONCLUÍDO'
+    };
+
+    setPayPixReceipt(receiptObj);
+    addNotification('Pagamento Pix Efetuado!', `Pix de R$ ${valNum.toFixed(2)} quitado com sucesso para ${receiptObj.recipient}.`, 'success');
+  };
 
   // Simulator & Macro input
   const [rawInputCode, setRawInputCode] = useState('');
@@ -425,7 +556,7 @@ export const CentralPixView: React.FC = () => {
         <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
           <button
             onClick={() => setActiveTab('inbox')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               activeTab === 'inbox'
                 ? 'bg-emerald-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white'
@@ -441,8 +572,20 @@ export const CentralPixView: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('paypix')}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'paypix'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Send className="h-4 w-4" />
+            Pagar Pix
+          </button>
+
+          <button
             onClick={() => setActiveTab('macrodroid')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               activeTab === 'macrodroid'
                 ? 'bg-emerald-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white'
@@ -939,6 +1082,264 @@ export const CentralPixView: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Conteúdo Aba Pagar Pix */}
+      {activeTab === 'paypix' && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-5xl mx-auto w-full">
+          
+          {/* Main Title & Subtitle */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="bg-emerald-500/20 text-emerald-400 p-2 rounded-xl border border-emerald-500/30">
+                  <Send className="h-5 w-5" />
+                </div>
+                <h2 className="text-xl font-bold text-white tracking-tight">Efetuar Pagamento Pix</h2>
+              </div>
+              <p className="text-slate-400 text-xs mt-1">
+                Cole uma chave Pix, código Copia e Cola ou crie uma cobrança direta para amortizar suas dívidas.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-300 font-medium">
+              <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              <span>Ambiente Seguro com Validação EMV®</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Form Column */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-5 shadow-lg">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <DollarSign className="h-4.5 w-4.5 text-emerald-400" />
+                Dados do Pagamento Pix
+              </h3>
+
+              <form onSubmit={handleGeneratePixPayment} className="space-y-4">
+                
+                {/* Input Pix Key or Payload */}
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
+                    Chave Pix ou Código Copia e Cola (EMV)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={payPixInput}
+                    onChange={(e) => handlePayPixInputChange(e.target.value)}
+                    placeholder="Cole aqui o código Pix Copia e Cola (ex: 000201...) ou informe uma chave Pix (CPF, CNPJ, E-mail, Celular)"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono resize-none"
+                  />
+                </div>
+
+                {/* Grid 2 cols: Recipient & Amount */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
+                      Nome do Recebedor
+                    </label>
+                    <input
+                      type="text"
+                      value={payPixRecipient}
+                      onChange={(e) => setPayPixRecipient(e.target.value)}
+                      placeholder="Ex: Nubank, Mercado Pago, Fulano"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
+                      Valor a Pagar (R$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={payPixAmount}
+                      onChange={(e) => setPayPixAmount(e.target.value)}
+                      placeholder="0,00"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-bold text-emerald-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Linked Debt Select */}
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
+                    Vincular a uma Dívida (Amortização Automática)
+                  </label>
+                  <select
+                    value={payPixSelectedDebtId}
+                    onChange={(e) => setPayPixSelectedDebtId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="">Nenhuma (Pagamento Avulso)</option>
+                    {debts.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.bank}) — Parcela R$ {d.installmentValue?.toFixed(2)} | Restante: R$ {d.currentBalance?.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
+                    Descrição ou Identificador (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={payPixDescription}
+                    onChange={(e) => setPayPixDescription(e.target.value)}
+                    placeholder="Ex: Quitação de parcela de empréstimo"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={payPixIsLoading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-extrabold text-xs py-3.5 rounded-2xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {payPixIsLoading ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Gerando Cobrança Pix...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-4 w-4" />
+                      <span>Gerar QR Code & Código Copia e Cola</span>
+                    </>
+                  )}
+                </button>
+
+              </form>
+            </div>
+
+            {/* Result & Confirmation Column */}
+            <div className="space-y-6">
+              
+              {payPixResult ? (
+                <div className="bg-slate-900 border border-emerald-500/30 rounded-3xl p-6 space-y-5 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <QrCode className="h-5 w-5 text-emerald-400" />
+                      <h4 className="font-bold text-white text-sm">Pix Pronto para Pagamento</h4>
+                    </div>
+                    <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      Aguardando Pagamento
+                    </span>
+                  </div>
+
+                  {/* Display QR Code */}
+                  <div className="flex flex-col items-center justify-center p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                    {payPixResult.qrCodeBase64 ? (
+                      <img
+                        src={payPixResult.qrCodeBase64.startsWith('data:') ? payPixResult.qrCodeBase64 : `data:image/png;base64,${payPixResult.qrCodeBase64}`}
+                        alt="QR Code Pix"
+                        className="w-48 h-48 rounded-xl bg-white p-2 border border-slate-700 shadow-md"
+                      />
+                    ) : (
+                      <div className="w-48 h-48 bg-slate-900 rounded-xl flex items-center justify-center text-slate-500 text-xs">
+                        QR Code Indisponível
+                      </div>
+                    )}
+                    <span className="text-[11px] text-slate-400 font-medium">Abra o app do seu banco e escaneie o código</span>
+                  </div>
+
+                  {/* Pix Copia e Cola Field */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Código Pix Copia e Cola</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={payPixResult.qrCodeCopyPaste || payPixInput}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[11px] text-emerald-400 font-mono select-all truncate"
+                      />
+                      <button
+                        onClick={() => {
+                          const codeToCopy = payPixResult.qrCodeCopyPaste || payPixInput;
+                          navigator.clipboard.writeText(codeToCopy);
+                          setCopiedPixText(true);
+                          setTimeout(() => setCopiedPixText(false), 3000);
+                          addNotification('Copiado!', 'Código Pix Copia e Cola copiado para a área de transferência.', 'success');
+                        }}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        {copiedPixText ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                        <span>{copiedPixText ? 'Copiado!' : 'Copiar'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm Payment Action Button */}
+                  <button
+                    onClick={handleExecuteConfirmPayPix}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-xs py-4 rounded-2xl transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
+                  >
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span>Confirmar Pagamento Realizado (Dar Baixa)</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 text-center space-y-4 flex flex-col items-center justify-center min-h-[350px]">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center text-emerald-400">
+                    <QrCode className="h-7 w-7 opacity-70" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Pronto para Gerar seu Pix</h4>
+                    <p className="text-slate-400 text-xs max-w-xs mx-auto mt-1 leading-relaxed">
+                      Preencha os dados do recebedor e o valor para gerar instantaneamente o QR Code e o código Copia e Cola.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Receipt Output if Paid */}
+              {payPixReceipt && (
+                <div className="bg-slate-900 border border-emerald-500/50 p-5 rounded-3xl space-y-3 shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                      <FileCheck className="h-5 w-5" />
+                      <span>Comprovante Pix Registrado</span>
+                    </div>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-md font-mono">
+                      {payPixReceipt.status}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between py-1 border-b border-slate-850">
+                      <span className="text-slate-400">Recebedor:</span>
+                      <strong className="text-white">{payPixReceipt.recipient}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-850">
+                      <span className="text-slate-400">Valor Pago:</span>
+                      <strong className="text-emerald-400 text-sm">{payPixReceipt.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-850">
+                      <span className="text-slate-400">Dívida Amortizada:</span>
+                      <strong className="text-slate-200">{payPixReceipt.debtName}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-850">
+                      <span className="text-slate-400">ID da Transação:</span>
+                      <span className="text-slate-400 font-mono text-[10px]">{payPixReceipt.transactionId}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-slate-400">Data e Hora:</span>
+                      <span className="text-slate-300">{new Date(payPixReceipt.date).toLocaleString('pt-BR')}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+          </div>
+
         </div>
       )}
 
