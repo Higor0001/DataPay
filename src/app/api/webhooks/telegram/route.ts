@@ -354,13 +354,22 @@ Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financ
           return NextResponse.json({ ok: true });
         }
 
-        let msgText = `📋 *Selecione a Dívida para Vincular Pix ou Boleto:*\n\nClique na dívida desejada para escolher a parcela:`;
-
-        const keyboardButtons = activeDebts.map((d: any) => {
+        let msgText = `📋 *Suas Dívidas Pendentes no DataPay:*\n\n`;
+        activeDebts.forEach((d: any, idx: number) => {
           const val = d.installmentValue || d.currentBalance || 0;
+          const totalInst = d.totalInstallments || 12;
+          const remInst = d.remainingInstallments || 1;
+          const currentNum = Math.max(1, totalInst - remInst + 1);
+          msgText += `${idx + 1}. 💳 *${d.name}*\n   🏦 *Banco:* ${d.bank}\n   🗓️ *Parcela Atual:* ${currentNum}/${totalInst} (R$ ${val.toFixed(2)})\n   📉 *Saldo Devedor Total:* R$ ${(d.currentBalance || 0).toFixed(2)}\n\n`;
+        });
+        msgText += `👇 *Selecione a Dívida no botão abaixo para pagar:*`;
+
+        const keyboardButtons = activeDebts.map((d: any, idx: number) => {
+          const val = d.installmentValue || d.currentBalance || 0;
+          const labelName = d.name.length > 18 ? d.name.substring(0, 16) + '...' : d.name;
           return [
             {
-              text: `💳 ${d.name} (${d.bank}) — Parcela R$ ${val.toFixed(2)}`,
+              text: `${idx + 1}. ${labelName} (${d.bank}) — R$ ${val.toFixed(2)}`,
               callback_data: `select_debt_${d.id}`
             }
           ];
