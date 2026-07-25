@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { decodeEMVPix } from '../../../../utils/emvPixParser';
+import { parseBoletoLine } from '../../../../utils/boletoParser';
 import { connectToDatabase } from '../../../../utils/mongodb';
 import { getPixCopyPasteCode } from '../../../../utils/qrCode';
 
@@ -21,11 +22,12 @@ if (!globalThis.telegramPendingDebtSelections) {
   globalThis.telegramPendingDebtSelections = new Map();
 }
 
-// Persistent Bottom Menu Keyboard (Teclado de Menu Fixo do Telegram)
+// Persistent Bottom Menu Keyboard (Teclado de Menu Fixo do Telegram com suporte a Pix e Boletos)
 const mainPersistentMenu = {
   keyboard: [
     [{ text: '📋 Minhas Dívidas' }, { text: '🏦 Saldos Open Finance' }],
-    [{ text: '💸 Pagar Pix' }, { text: 'ℹ️ Ajuda & Comandos' }]
+    [{ text: '💸 Pagar Pix' }, { text: '📄 Pagar Boleto' }],
+    [{ text: 'ℹ️ Ajuda & Comandos' }]
   ],
   resize_keyboard: true,
   is_persistent: true
@@ -118,10 +120,8 @@ export async function POST(req: Request) {
             const valParcela = targetDebt.installmentValue || targetDebt.currentBalance || 100;
             const valTotal = targetDebt.currentBalance || valParcela;
 
-            // Constrói lista de botões verticais empilhados para escolher a Parcela / Referência
             const parcelButtons = [];
 
-            // Opção 1: Parcela Atual Próxima
             parcelButtons.push([
               {
                 text: `🗓️ Parcela ${currentParcelNum}/${totalInst} (Atual) — R$ ${valParcela.toFixed(2)}`,
@@ -129,7 +129,6 @@ export async function POST(req: Request) {
               }
             ]);
 
-            // Opção 2: Parcela Seguinte (se houver mais de 1 parcela restante)
             if (remainingInst > 1 && currentParcelNum + 1 <= totalInst) {
               parcelButtons.push([
                 {
@@ -139,7 +138,6 @@ export async function POST(req: Request) {
               ]);
             }
 
-            // Opção 3: Quitar o Saldo Devedor Total
             parcelButtons.push([
               {
                 text: `💰 Quitar Saldo Total — R$ ${valTotal.toFixed(2)}`,
@@ -153,7 +151,7 @@ export async function POST(req: Request) {
 💰 *Valor da Parcela:* R$ ${valParcela.toFixed(2)}
 📉 *Saldo Devedor Total:* R$ ${valTotal.toFixed(2)}
 
-📌 *Selecione a Referência / Parcela* que você deseja pagar com esta Chave Pix:`;
+📌 *Selecione a Referência / Parcela* para pagar com Pix ou Boleto:`;
 
             const replyMarkup = { inline_keyboard: parcelButtons };
             if (botToken) await sendTelegramMessage(botToken, chatId, msgText, replyMarkup);
@@ -167,7 +165,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
-      // 2. Passo 2: Seleção da Parcela/Referência -> Grava a Seleção Pendente (select_parcel_<debtId>_<parcelRef>_<amount>)
+      // 2. Passo 2: Seleção da Parcela/Referência (select_parcel_<debtId>_<parcelRef>_<amount>)
       if (cbData.startsWith('select_parcel_')) {
         const parts = cbData.replace('select_parcel_', '').split('_');
         const debtId = parts[0];
@@ -198,7 +196,7 @@ export async function POST(req: Request) {
 💰 *Valor:* R$ ${(amount || targetDebt.installmentValue || 0).toFixed(2)}
 
 📲 *Próximo Passo:*
-Envie ou cole agora a *Chave Pix* ou o código *Pix Copia e Cola (\`000201...\`)* específico para esta parcela!`;
+Envie ou cole agora a *Chave Pix*, código *Pix Copia e Cola (\`000201...\`)* ou a *Linha Digitável do Boleto* (44 a 48 dígitos) para vincular e quitar!`;
 
             if (botToken) await sendTelegramMessage(botToken, chatId, promptMsg);
           }
@@ -318,21 +316,22 @@ Envie ou cole agora a *Chave Pix* ou o código *Pix Copia e Cola (\`000201...\`)
       text.startsWith('/ajuda') ||
       text.includes('Ajuda')
     ) {
-      const helpMsg = `🤖 *Central Pix & DataPay Bot*
+      const helpMsg = `🤖 *Central Pix & Boletos — DataPay Bot*
 
 Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financeiro:
 
 📌 *Recursos Principais:*
-• *📋 Minhas Dívidas* — Lista suas dívidas e parcelas para atrelar a Chave Pix.
+• *📋 Minhas Dívidas* — Lista dívidas e parcelas para vincular Pix ou Boleto.
 • *🏦 Saldos Open Finance* — Consulta saldos em tempo real via Pierre API.
-• *💸 Pagar Pix* — Gera cobrança e QR Code instantâneo.
+• *💸 Pagar Pix* — Cole um Pix Copia e Cola ou Chave.
+• *📄 Pagar Boleto* — Cole a Linha Digitável de um Boleto (44-48 dígitos).
 • *ℹ️ Ajuda & Comandos* — Exibe este menu.`;
 
       if (botToken) await sendTelegramMessage(botToken, chatId, helpMsg, mainPersistentMenu);
       return NextResponse.json({ ok: true });
     }
 
-    // 2. Comando /dividas ou botão "📋 Minhas Dívidas" (Exibe botões empilhados das dívidas)
+    // 2. Comando /dividas ou botão "📋 Minhas Dívidas"
     if (
       text.startsWith('/dividas') ||
       text.startsWith('/divida') ||
@@ -355,9 +354,8 @@ Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financ
           return NextResponse.json({ ok: true });
         }
 
-        let msgText = `📋 *Selecione a Dívida para Vincular a Chave Pix:*\n\nClique na dívida desejada para escolher a parcela:`;
+        let msgText = `📋 *Selecione a Dívida para Vincular Pix ou Boleto:*\n\nClique na dívida desejada para escolher a parcela:`;
 
-        // Botões empilhados idênticos ao layout do screenshot fornecido
         const keyboardButtons = activeDebts.map((d: any) => {
           const val = d.installmentValue || d.currentBalance || 0;
           return [
@@ -413,13 +411,94 @@ Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financ
       return NextResponse.json({ ok: true });
     }
 
-    // 4. Recebimento de Chave Pix ou Payload EMV (Com suporte a parcela/referência selecionada)
+    // 4. Suporte a envio de Linha Digitável de Boleto (44 a 48 dígitos)
+    const cleanDigits = text.replace(/[^0-9]/g, '');
+    const isBoletoCode = cleanDigits.length >= 44 && cleanDigits.length <= 48 && !text.includes('000201');
+
+    if (isBoletoCode || text.startsWith('/boleto') || text.includes('Pagar Boleto')) {
+      if (text.includes('Pagar Boleto') && cleanDigits.length < 44) {
+        if (botToken) {
+          await sendTelegramMessage(
+            botToken,
+            chatId,
+            `📄 *Envio de Boleto Bancário*\n\nCole a Linha Digitável (código de barras de 44 a 48 dígitos) do seu Boleto nesta conversa!`,
+            mainPersistentMenu
+          );
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      const boletoCode = text.startsWith('/boleto') ? text.replace('/boleto', '').trim() : text;
+      const boletoRes = parseBoletoLine(boletoCode);
+      const pendingSelection = globalThis.telegramPendingDebtSelections.get(chatId);
+
+      const targetAmount = boletoRes.amount || pendingSelection?.amount || 100;
+      const bankName = boletoRes.bankName || pendingSelection?.bank || 'Boleto Bancário';
+      const parcelRef = pendingSelection?.parcelRef || 'Parcela';
+
+      // Registra o Boleto na Central Pix & Boletos
+      const queueId = 'bol_tg_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+      const newItem = {
+        id: queueId,
+        rawPayload: boletoRes.cleanLine || cleanDigits,
+        type: 'boleto',
+        decoded: {
+          merchantName: bankName,
+          amount: targetAmount,
+          merchantCity: 'Brasil',
+          dueDate: boletoRes.dueDate
+        },
+        receivedAt: new Date().toISOString(),
+        status: 'PENDING' as const,
+        linkedDebtId: pendingSelection?.debtId,
+        parcelRef,
+        source: 'TELEGRAM_BOT'
+      };
+
+      try {
+        const { db } = await connectToDatabase();
+        await db.collection('CentralPix').updateOne({ id: newItem.id }, { $set: newItem }, { upsert: true });
+      } catch (dbErr: any) {
+        console.warn('[Telegram Boleto DB Error]:', dbErr.message);
+      }
+
+      if (typeof globalThis.pixQueueBuffer !== 'undefined') {
+        globalThis.pixQueueBuffer.unshift(newItem);
+      }
+
+      let responseMsg = `📄 *Boleto Decodificado & Vinculado com Sucesso!*\n\n`;
+      if (pendingSelection) {
+        responseMsg += `💳 *Dívida:* ${pendingSelection.debtName} (${pendingSelection.bank})\n`;
+        responseMsg += `🗓️ *Referência:* ${parcelRef}\n`;
+      }
+      responseMsg += `🏦 *Emissor:* ${bankName}\n`;
+      responseMsg += `💰 *Valor:* R$ ${targetAmount.toFixed(2)}\n`;
+      if (boletoRes.dueDate) responseMsg += `📅 *Vencimento:* ${boletoRes.dueDate}\n`;
+      responseMsg += `\n📋 *Linha Digitável:*\n\`${boletoRes.cleanLine || cleanDigits}\``;
+
+      const confirmButtons = [];
+      if (pendingSelection) {
+        confirmButtons.push([
+          {
+            text: `✅ Confirmar Baixa do Boleto (${parcelRef} - R$ ${targetAmount.toFixed(2)})`,
+            callback_data: `confirm_pay_${pendingSelection.debtId}_${targetAmount}_${encodeURIComponent(parcelRef)}`
+          }
+        ]);
+      }
+
+      const replyMarkup = confirmButtons.length > 0 ? { inline_keyboard: confirmButtons } : mainPersistentMenu;
+
+      if (botToken) await sendTelegramMessage(botToken, chatId, responseMsg, replyMarkup);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 5. Recebimento de Chave Pix ou Payload EMV
     const pendingSelection = globalThis.telegramPendingDebtSelections.get(chatId);
     let pixCodeToParse = text.startsWith('/pix') ? text.replace('/pix', '').trim() : text;
 
     const isEMVCode = pixCodeToParse.includes('000201') || pixCodeToParse.length > 25;
 
-    if (isEMVCode || pendingSelection) {
+    if (isEMVCode || (pendingSelection && !isBoletoCode)) {
       const match = pixCodeToParse.match(/000201[0-9a-zA-Z]+/);
       const cleanCode = match
         ? match[0]
@@ -432,11 +511,12 @@ Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financ
       const recipientName = decodeResult.decoded?.merchantName || pendingSelection?.debtName || 'Beneficiário Pix';
       const parcelRef = pendingSelection?.parcelRef || 'Parcela';
 
-      // Registra o Pix na Central Pix
+      // Registra o Pix na Central Pix & Boletos
       const queueId = 'pix_tg_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
       const newItem = {
         id: queueId,
         rawPayload: cleanCode,
+        type: 'pix',
         decoded: decodeResult.decoded || { merchantName: recipientName, amount: targetAmount, merchantCity: 'Brasil' },
         receivedAt: new Date().toISOString(),
         status: 'PENDING' as const,
@@ -456,7 +536,6 @@ Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financ
         globalThis.pixQueueBuffer.unshift(newItem);
       }
 
-      // Resposta com botões para confirmação da quitação da parcela específica
       let responseMsg = `⚡ *Pix Gerado & Atrelado com Sucesso!*\n\n`;
       if (pendingSelection) {
         responseMsg += `💳 *Dívida:* ${pendingSelection.debtName} (${pendingSelection.bank})\n`;
@@ -487,7 +566,7 @@ Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financ
       await sendTelegramMessage(
         botToken,
         chatId,
-        `💡 *Como Pagar uma Parcela com Pix:*\n\n1. Clique em *📋 Minhas Dívidas* ou digite \`/dividas\`.\n2. Escolha a dívida e a *parcela/referência* desejada.\n3. Cole a Chave Pix ou código Copia e Cola para dar baixa!`,
+        `💡 *Como Pagar uma Dívida com Pix ou Boleto:*\n\n1. Clique em *📋 Minhas Dívidas* ou digite \`/dividas\`.\n2. Escolha a dívida e a *parcela/referência* desejada.\n3. Cole a Chave Pix, código Copia e Cola ou a *Linha Digitável do Boleto* (44-48 dígitos) para dar baixa!`,
         mainPersistentMenu
       );
     }

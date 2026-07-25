@@ -5,6 +5,7 @@ import { useAppState } from '../context/StateContext';
 import { Debt, Payment } from '../types';
 import { PixReceiptItem, CompetenceChecklistItem } from '../types/centralPix';
 import { decodeEMVPix } from '../utils/emvPixParser';
+import { parseBoletoLine } from '../utils/boletoParser';
 import { predictDebtForPix, buildCompetenceChecklist } from '../utils/pixAIMotor';
 import { generateScannablePixQRCodeDataURL, getPixCopyPasteCode } from '../utils/qrCode';
 import { downloadMacroDroidFile } from '../utils/macrodroidGenerator';
@@ -69,9 +70,11 @@ export const CentralPixView: React.FC = () => {
   const [payPixReceipt, setPayPixReceipt] = useState<any>(null);
   const [copiedPixText, setCopiedPixText] = useState(false);
 
-  // Auto decodifica se o usuário colar um código Pix Copia e Cola EMV
+  // Auto decodifica se o usuário colar um código Pix Copia e Cola EMV ou Linha Digitável de Boleto
   const handlePayPixInputChange = (val: string) => {
     setPayPixInput(val);
+    const cleanDigits = val.replace(/[^0-9]/g, '');
+
     if (val.startsWith('000201')) {
       const decodedRes = decodeEMVPix(val);
       if (decodedRes.valid && decodedRes.decoded) {
@@ -86,6 +89,24 @@ export const CentralPixView: React.FC = () => {
           'Pix Copia e Cola Decodificado',
           `Recebedor: ${decodedRes.decoded.merchantName} | Valor: R$ ${decodedRes.decoded.amount?.toFixed(2) || 'A definir'}`,
           'info'
+        );
+      }
+    } else if (cleanDigits.length >= 44 && cleanDigits.length <= 48) {
+      const boletoRes = parseBoletoLine(val);
+      if (boletoRes.valid) {
+        setPayPixRecipient(boletoRes.bankName);
+        if (boletoRes.amount) setPayPixAmount(boletoRes.amount.toString());
+
+        const matchDebt = debts.find(d => 
+          d.bank.toLowerCase().includes(boletoRes.bankName.toLowerCase()) || 
+          d.name.toLowerCase().includes(boletoRes.bankName.toLowerCase())
+        );
+        if (matchDebt) setPayPixSelectedDebtId(matchDebt.id);
+
+        addNotification(
+          '📄 Boleto Decodificado!',
+          `Emissor: ${boletoRes.bankName} | Valor: ${boletoRes.amount ? `R$ ${boletoRes.amount.toFixed(2)}` : 'A definir'} | Vencimento: ${boletoRes.dueDate || 'N/A'}`,
+          'success'
         );
       }
     }
@@ -556,7 +577,7 @@ export const CentralPixView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
 
-      {/* Header Central Pix */}
+      {/* Header Central Pix & Boletos */}
       <header className="px-6 py-4 bg-slate-900 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="bg-gradient-to-tr from-emerald-600 to-teal-500 p-2.5 rounded-xl shadow-lg shadow-emerald-500/20">
@@ -564,12 +585,12 @@ export const CentralPixView: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-extrabold text-white tracking-tight">Central Pix</h1>
+              <h1 className="text-xl font-extrabold text-white tracking-tight">Central Pix & Boletos</h1>
               <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 Zero-Private-API Engine
               </span>
             </div>
-            <p className="text-xs text-slate-400">Decodificador EMV e Fila Inteligente com Predição IA</p>
+            <p className="text-xs text-slate-400">Decodificador EMV, Linhas Digitáveis de Boletos e Fila Inteligente com IA</p>
           </div>
         </div>
 
@@ -601,7 +622,7 @@ export const CentralPixView: React.FC = () => {
             }`}
           >
             <Send className="h-4 w-4" />
-            Pagar Pix
+            Pagar Pix / Boleto
           </button>
 
           <button
@@ -1140,16 +1161,16 @@ export const CentralPixView: React.FC = () => {
                 <div className="bg-emerald-500/20 text-emerald-400 p-2 rounded-xl border border-emerald-500/30">
                   <Send className="h-5 w-5" />
                 </div>
-                <h2 className="text-xl font-bold text-white tracking-tight">Efetuar Pagamento Pix</h2>
+                <h2 className="text-xl font-bold text-white tracking-tight">Efetuar Pagamento Pix ou Boleto</h2>
               </div>
               <p className="text-slate-400 text-xs mt-1">
-                Cole uma chave Pix, código Copia e Cola ou crie uma cobrança direta para amortizar suas dívidas.
+                Cole uma chave Pix, código Copia e Cola (`000201...`) ou a Linha Digitável de um Boleto (44 a 48 dígitos) para amortizar suas dívidas.
               </p>
             </div>
 
             <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-300 font-medium">
               <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              <span>Ambiente Seguro com Validação EMV®</span>
+              <span>Ambiente Seguro com Validação EMV® & Boleto BACEN</span>
             </div>
           </div>
 
@@ -1159,21 +1180,21 @@ export const CentralPixView: React.FC = () => {
             <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-5 shadow-lg">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <DollarSign className="h-4.5 w-4.5 text-emerald-400" />
-                Dados do Pagamento Pix
+                Dados do Pagamento Pix / Boleto
               </h3>
 
               <form onSubmit={handleGeneratePixPayment} className="space-y-4">
                 
-                {/* Input Pix Key or Payload */}
+                {/* Input Pix Key, EMV Payload or Boleto Line */}
                 <div>
                   <label className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
-                    Chave Pix ou Código Copia e Cola (EMV)
+                    Chave Pix, Código Copia e Cola ou Linha Digitável do Boleto
                   </label>
                   <textarea
                     rows={3}
                     value={payPixInput}
                     onChange={(e) => handlePayPixInputChange(e.target.value)}
-                    placeholder="Cole aqui o código Pix Copia e Cola (ex: 000201...) ou informe uma chave Pix (CPF, CNPJ, E-mail, Celular)"
+                    placeholder="Cole aqui o código Pix Copia e Cola (ex: 000201...), Chave Pix ou a Linha Digitável de Boleto (ex: 23793.38128...)"
                     className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono resize-none"
                   />
                 </div>
