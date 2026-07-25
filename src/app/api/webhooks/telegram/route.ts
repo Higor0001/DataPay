@@ -499,10 +499,7 @@ Selecione a opção desejada ou use o menu fixo abaixo para gerenciar seu financ
     const isEMVCode = pixCodeToParse.includes('000201') || pixCodeToParse.length > 25;
 
     if (isEMVCode || (pendingSelection && !isBoletoCode)) {
-      const match = pixCodeToParse.match(/000201[0-9a-zA-Z]+/);
-      const cleanCode = match
-        ? match[0]
-        : ensureAuthenticPixEMV(pixCodeToParse, pendingSelection?.amount || 100, pendingSelection?.debtName || 'DataPay');
+      const cleanCode = pixCodeToParse.trim();
 
       const decodeResult = decodeEMVPix(cleanCode);
       const targetAmount = pendingSelection ? pendingSelection.amount : (decodeResult.decoded?.amount || 100);

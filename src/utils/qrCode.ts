@@ -45,8 +45,8 @@ export function getStaticPixPayload(amount: number, key: string, name: string, c
 }
 
 /**
- * Garante que qualquer entrada (chave Pix, e-mail, telefone, CPF, CNPJ ou payload)
- * seja convertida em um PAYLOAD EMV PIX OFICIAL REAL sem usar dados fictícios.
+ * Converte exatamente a chave ou texto fornecido no formato de Payload EMV oficial se for chave simples,
+ * ou mantém o texto bruto se já for um payload/linha digitável.
  */
 export function ensureAuthenticPixEMV(inputStr: string, amount = 10, keyOrName = 'DataPay'): string {
   if (!inputStr || !inputStr.trim()) {
@@ -66,20 +66,17 @@ export function ensureAuthenticPixEMV(inputStr: string, amount = 10, keyOrName =
     return clean;
   }
 
-  // Caso contrário, a entrada É UMA CHAVE PIX REAL (CPF, CNPJ, E-mail, Celular ou Chave Aleatória)
-  // Gera o Payload EMV Oficial do Banco Central do Brasil para a chave real fornecida!
+  // Caso contrário, se for chave simples (e-mail, CPF, celular, etc), gera EMV estático
   return getStaticPixPayload(amount, clean, keyOrName, 'SAO PAULO');
 }
 
 /**
- * Gera um Data URL PNG de alta definição e 100% escaneável para renderizar em tag <img>.
- * Compatível com qualquer aplicativo de banco (Nubank, Mercado Pago, Itaú, Bradesco, etc.) e câmera de celular.
+ * Pega exatamente o texto bruto passado e converte DIRETA E FIELMENTE em uma imagem PNG de QR Code.
  */
 export async function generateScannablePixQRCodeDataURL(text: string, width = 320): Promise<string> {
   try {
     if (!text || !text.trim()) return '';
-    const authenticPayload = ensureAuthenticPixEMV(text);
-    return await QRCode.toDataURL(authenticPayload.trim(), {
+    return await QRCode.toDataURL(text.trim(), {
       width,
       margin: 1,
       errorCorrectionLevel: 'M',
@@ -95,13 +92,12 @@ export async function generateScannablePixQRCodeDataURL(text: string, width = 32
 }
 
 /**
- * Gera uma string SVG limpa em conformidade estrita com o padrão ISO/IEC 18004.
+ * Gera uma string SVG limpa codificando EXATAMENTE o texto bruto.
  */
 export async function generateScannablePixQRCodeSVG(text: string): Promise<string> {
   try {
     if (!text || !text.trim()) return '';
-    const authenticPayload = ensureAuthenticPixEMV(text);
-    return await QRCode.toString(authenticPayload.trim(), {
+    return await QRCode.toString(text.trim(), {
       type: 'svg',
       margin: 1,
       errorCorrectionLevel: 'M',
@@ -128,7 +124,7 @@ export function generatePixQRCodeSVG(text: string, size = 256): { svgPath: strin
 }
 
 /**
- * Retorna uma string padrão Pix Copia e Cola estruturada no padrão oficial do Banco Central
+ * Retorna o código Pix estático para a chave fornecida
  */
 export function getPixCopyPasteCode(amount: number, description = 'DataPay', pixKey?: string): string {
   const targetKey = pixKey && pixKey.trim() ? pixKey.trim() : 'financeiro@datapay.com';
