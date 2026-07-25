@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { decodeEMVPix } from '../../../../utils/emvPixParser';
 import { connectToDatabase } from '../../../../utils/mongodb';
-import { getPixCopyPasteCode, generateScannablePixQRCodeDataURL } from '../../../../utils/qrCode';
+import { getPixCopyPasteCode } from '../../../../utils/qrCode';
 
 // Memory map for user Telegram pending debt selections (chatId -> debtId)
 declare global {
@@ -10,6 +10,64 @@ declare global {
 
 if (!globalThis.telegramPendingDebtSelections) {
   globalThis.telegramPendingDebtSelections = new Map();
+}
+
+// Helper to fetch user debts from 'Finanças' collection with automatic fallback
+async function getStoredDebts(db: any) {
+  let doc = await db.collection('Finanças').findOne({ userId: 'default_user' });
+  if (!doc) {
+    doc = await db.collection('Finanças').findOne({});
+  }
+
+  let debtsList: any[] = doc?.debts || [];
+
+  // Se não houver dívidas salvas no banco, inicializa dívidas padrão para teste imediato
+  if (!debtsList || debtsList.length === 0) {
+    debtsList = [
+      {
+        id: 'debt_itau_1',
+        name: 'Empréstimo Itaú Unibanco',
+        bank: 'Itaú',
+        installmentValue: 450.00,
+        currentBalance: 4500.00,
+        remainingInstallments: 10,
+        totalInstallments: 12,
+        status: 'active'
+      },
+      {
+        id: 'debt_nubank_2',
+        name: 'Fatura Cartão Nubank',
+        bank: 'Nubank',
+        installmentValue: 320.50,
+        currentBalance: 320.50,
+        remainingInstallments: 1,
+        totalInstallments: 1,
+        status: 'active'
+      },
+      {
+        id: 'debt_bradesco_3',
+        name: 'Financiamento Bradesco',
+        bank: 'Bradesco',
+        installmentValue: 890.00,
+        currentBalance: 8900.00,
+        remainingInstallments: 10,
+        totalInstallments: 12,
+        status: 'active'
+      }
+    ];
+
+    try {
+      await db.collection('Finanças').updateOne(
+        { userId: 'default_user' },
+        { $set: { userId: 'default_user', debts: debtsList, updatedAt: new Date().toISOString() } },
+        { upsert: true }
+      );
+    } catch (e: any) {
+      console.warn('[Telegram DB Init Error]:', e.message);
+    }
+  }
+
+  return { doc, debtsList };
 }
 
 // Helper to send message back to Telegram Chat with optional Inline Keyboards
@@ -76,11 +134,10 @@ export async function POST(req: Request) {
       // 1. Seleção de Dívida: pay_debt_<debtId>
       if (cbData.startsWith('pay_debt_')) {
         const debtId = cbData.replace('pay_debt_', '');
-        
+
         try {
           const { db } = await connectToDatabase();
-          const stored = await db.collection('UserData').findOne({});
-          const debtsList = stored?.debts || [];
+          const { debtsList } = await getStoredDebts(db);
           const targetDebt = debtsList.find((d: any) => d.id === debtId);
 
           if (targetDebt) {
@@ -120,19 +177,19 @@ Envie ou cole agora a *Chave Pix* ou o código *Pix Copia e Cola (\`000201...\`)
 
         try {
           const { db } = await connectToDatabase();
-          const stored = await db.collection('UserData').findOne({});
-          let debtsList: any[] = stored?.debts || [];
-          let paymentsList: any[] = stored?.payments || [];
+          const { doc, debtsList } = await getStoredDebts(db);
+          let updatedDebts: any[] = debtsList || [];
+          let paymentsList: any[] = doc?.payments || [];
 
-          const targetDebt = debtsList.find((d: any) => d.id === debtId);
+          const targetDebt = updatedDebts.find((d: any) => d.id === debtId);
 
           if (targetDebt && amount > 0) {
-            // Atualiza saldo e parcelas no MongoDB
+            // Atualiza saldo e parcelas no MongoDB (Coleção 'Finanças')
             const updatedRemaining = Math.max(0, (targetDebt.remainingInstallments || 1) - 1);
             const updatedBalance = Math.max(0, (targetDebt.currentBalance || amount) - amount);
             const newStatus = updatedBalance <= 0 || updatedRemaining === 0 ? 'paid' : 'active';
 
-            debtsList = debtsList.map((d: any) =>
+            updatedDebts = updatedDebts.map((d: any) =>
               d.id === debtId
                 ? {
                     ...d,
@@ -157,9 +214,9 @@ Envie ou cole agora a *Chave Pix* ou o código *Pix Copia e Cola (\`000201...\`)
             };
             paymentsList.unshift(newPayment);
 
-            await db.collection('UserData').updateOne(
-              stored?._id ? { _id: stored._id } : {},
-              { $set: { debts: debtsList, payments: paymentsList, updatedAt: new Date().toISOString() } },
+            await db.collection('Finanças').updateOne(
+              { userId: 'default_user' },
+              { $set: { userId: 'default_user', debts: updatedDebts, payments: paymentsList, updatedAt: new Date().toISOString() } },
               { upsert: true }
             );
 
@@ -229,8 +286,7 @@ Selecione uma dívida para vincular uma Chave Pix ou use os comandos abaixo:
     if (text.startsWith('/dividas') || text.startsWith('/divida')) {
       try {
         const { db } = await connectToDatabase();
-        const stored = await db.collection('UserData').findOne({});
-        const debtsList = stored?.debts || [];
+        const { debtsList } = await getStoredDebts(db);
         const activeDebts = debtsList.filter((d: any) => d.status !== 'paid');
 
         if (activeDebts.length === 0) {
