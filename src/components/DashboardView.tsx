@@ -46,11 +46,20 @@ export const DashboardView: React.FC = () => {
 
   useEffect(() => {
     setIsMounted(true);
-    PierreFinanceService.getBalance()
-      .then(res => {
+    const fetchPierre = async () => {
+      try {
+        await PierreFinanceService.manualUpdate();
+        const res = await PierreFinanceService.getBalance();
         if (res.data) setPierreBalance(res.data);
-      })
-      .catch(err => console.error('[Pierre Dashboard Load Error]:', err));
+      } catch (err) {
+        console.error('[Pierre Dashboard Load Error]:', err);
+      }
+    };
+
+    fetchPierre();
+    const interval = setInterval(fetchPierre, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Calculations

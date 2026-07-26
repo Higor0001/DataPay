@@ -62,10 +62,23 @@ export const PierreFinanceView: React.FC = () => {
     setApiKeyInput(savedKey);
     setIsKeySaved(!!savedKey);
     loadPierreData(savedKey);
+
+    // Envia solicitação de atualização para o Pierre a cada 5 segundos (5000 ms)
+    const autoSyncInterval = setInterval(async () => {
+      const currentKey = getStoredPierreApiKey();
+      try {
+        await PierreFinanceService.manualUpdate(currentKey);
+        await loadPierreData(currentKey, true);
+      } catch (err) {
+        console.error('[Pierre Auto-Sync 5s Error]:', err);
+      }
+    }, 5000);
+
+    return () => clearInterval(autoSyncInterval);
   }, []);
 
-  const loadPierreData = async (currentKey?: string) => {
-    setIsLoading(true);
+  const loadPierreData = async (currentKey?: string, isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
     try {
       const [balRes, accRes, txRes, billRes] = await Promise.all([
         PierreFinanceService.getBalance(currentKey),
@@ -83,7 +96,7 @@ export const PierreFinanceView: React.FC = () => {
     } catch (err: any) {
       console.error('[Pierre Data Load Error]:', err);
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   };
 
