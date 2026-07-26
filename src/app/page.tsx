@@ -16,7 +16,7 @@ import { GoalsView } from '../components/GoalsView';
 import { ReportsView } from '../components/ReportsView';
 import { SettingsView } from '../components/SettingsView';
 import { CentralPixView } from '../components/CentralPixView';
-import { Bell, QrCode } from 'lucide-react';
+import { BiometricLock } from '../components/BiometricLock';
 
 function InnerPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -118,7 +118,9 @@ function InnerPage() {
 export default function Home() {
   return (
     <StateProvider>
-      <InnerPage />
+      <BiometricLock>
+        <InnerPage />
+      </BiometricLock>
     </StateProvider>
   );
 }

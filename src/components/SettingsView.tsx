@@ -28,6 +28,14 @@ import {
 } from 'lucide-react';
 
 import { getStoredPierreApiKey, setStoredPierreApiKey } from '../services/pierreService';
+import {
+  isBiometricsSupported,
+  isBiometricsEnabled,
+  setBiometricsEnabled,
+  registerBiometrics,
+  getBackupPin,
+  setBackupPin
+} from '../utils/webauthn';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -45,9 +53,51 @@ export const SettingsView: React.FC = () => {
   const [activeSettingsTab, setActiveSettingsTab] = useState<'integrations' | 'mongodb' | 'security' | 'pix'>('integrations');
   const [emailInput, setEmailInput] = useState(syncEmail);
 
+  // Biometrics & Security states
+  const [bioEnabled, setBioEnabled] = useState<boolean>(false);
+  const [pinValue, setPinValue] = useState<string>('');
+  const [showPinInputModal, setShowPinInputModal] = useState<boolean>(false);
+
   useEffect(() => {
     setEmailInput(syncEmail);
+    setBioEnabled(isBiometricsEnabled());
+    setPinValue(getBackupPin());
   }, [syncEmail]);
+
+  const handleToggleBiometrics = async (enabled: boolean) => {
+    if (enabled) {
+      const res = await registerBiometrics();
+      if (res.success) {
+        setBioEnabled(true);
+        addNotification('Segurança Biométrica Ativada', res.message, 'success');
+      } else {
+        if (getBackupPin()) {
+          setBiometricsEnabled(true);
+          setBioEnabled(true);
+          addNotification('Bloqueio por PIN Ativado', 'O bloqueio do aplicativo usando PIN foi ativado com sucesso!', 'success');
+        } else {
+          setShowPinInputModal(true);
+        }
+      }
+    } else {
+      setBiometricsEnabled(false);
+      setBioEnabled(false);
+      addNotification('Bloqueio Desativado', 'O bloqueio biométrico do aplicativo foi desativado.', 'info');
+    }
+  };
+
+  const handleSaveBackupPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinValue || pinValue.trim().length < 4) {
+      addNotification('PIN Inválido', 'O PIN deve ter no mínimo 4 dígitos numéricos.', 'error');
+      return;
+    }
+    setBackupPin(pinValue.trim());
+    setBiometricsEnabled(true);
+    setBioEnabled(true);
+    setShowPinInputModal(false);
+    addNotification('PIN Salvo e Bloqueio Ativado', 'Seu PIN de segurança foi configurado e o bloqueio do app foi ativado!', 'success');
+  };
 
   // Pix direct config states
   const [pixKey, setPixKey] = useState(() => {
@@ -583,34 +633,110 @@ export const SettingsView: React.FC = () => {
               </div>
 
               {/* Authentication options security */}
-              <div className="border-t border-slate-850 pt-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="bg-indigo-600/20 p-2 rounded-xl text-indigo-400 border border-indigo-900/30">
-                    <LockKeyhole className="h-5 w-5" />
+              <div className="border-t border-slate-850 pt-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-indigo-600/20 p-2 rounded-xl text-indigo-400 border border-indigo-900/30">
+                      <LockKeyhole className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-sm">Autenticação Biométrica e PIN</h3>
+                      <p className="text-[10px] text-slate-400">Exigir validação por Digital/Face ID ou PIN ao abrir o DataPay.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-white text-sm">Autenticação Biométrica e PIN</h3>
-                    <p className="text-[10px] text-slate-400">Configure camadas extras de proteção para uso móvel no PWA.</p>
-                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bioEnabled}
+                      onChange={(e) => handleToggleBiometrics(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  {/* PIN Config Card */}
                   <div className="p-4 bg-slate-950/40 border border-slate-850 rounded-2xl flex items-center justify-between">
                     <div>
-                      <h4 className="font-bold text-slate-200">Senha PIN de Acesso</h4>
-                      <p className="text-[9.5px] text-slate-500 mt-0.5">PIN numérico de 4 dígitos</p>
+                      <h4 className="font-bold text-slate-200">Senha PIN de Backup</h4>
+                      <p className="text-[9.5px] text-slate-500 mt-0.5">
+                        {getBackupPin() ? 'PIN numérico configurado' : 'Nenhum PIN de backup cadastrado'}
+                      </p>
                     </div>
-                    <span className="text-[9.5px] font-bold text-indigo-400 bg-indigo-950/50 px-2 py-0.5 rounded-md">Ativo</span>
+                    <button
+                      onClick={() => setShowPinInputModal(true)}
+                      className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 bg-indigo-950/50 hover:bg-indigo-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      {getBackupPin() ? 'Alterar PIN' : 'Cadastrar PIN'}
+                    </button>
                   </div>
 
+                  {/* Biometric Status Card */}
                   <div className="p-4 bg-slate-950/40 border border-slate-850 rounded-2xl flex items-center justify-between">
                     <div>
-                      <h4 className="font-bold text-slate-200">FaceID / TouchID</h4>
-                      <p className="text-[9.5px] text-slate-500 mt-0.5">Validação biométrica celular</p>
+                      <h4 className="font-bold text-slate-200">Leitor Biométrico (WebAuthn)</h4>
+                      <p className="text-[9.5px] text-slate-500 mt-0.5">
+                        {isBiometricsSupported() ? 'Dispositivo Suportado (Fingerprint / Face ID)' : 'Não suportado no navegador atual'}
+                      </p>
                     </div>
-                    <span className="text-[9.5px] font-bold text-indigo-400 bg-indigo-950/50 px-2 py-0.5 rounded-md">Configurado</span>
+                    <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md ${
+                      bioEnabled ? 'text-emerald-400 bg-emerald-950/50 border border-emerald-500/20' : 'text-slate-500 bg-slate-950'
+                    }`}>
+                      {bioEnabled ? 'Ativo' : 'Inativo'}
+                    </span>
                   </div>
                 </div>
+
+                {/* PIN Modal dialog */}
+                {showPinInputModal && (
+                  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <h4 className="font-bold text-white text-sm">Cadastrar PIN de Segurança</h4>
+                        <button onClick={() => setShowPinInputModal(false)} className="text-slate-400 hover:text-white">&times;</button>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Digite uma senha numérica de 4 a 6 dígitos para ser utilizada como contingência se a leitura biométrica falhar.
+                      </p>
+
+                      <form onSubmit={handleSaveBackupPin} className="space-y-4">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-400 block mb-1">PIN Numérico (4 a 6 números)</label>
+                          <input
+                            type="password"
+                            maxLength={6}
+                            required
+                            pattern="[0-9]*"
+                            inputMode="numeric"
+                            value={pinValue}
+                            onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ''))}
+                            placeholder="Ex: 1234"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-center text-lg font-bold tracking-widest text-white focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowPinInputModal(false)}
+                            className="px-4 py-2 text-xs text-slate-400 hover:text-white"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="submit"
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md cursor-pointer"
+                          >
+                            Salvar PIN
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>
